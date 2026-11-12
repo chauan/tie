@@ -1,0 +1,36 @@
+# Local account, replay and history data
+/data/
+/data-*/
+/config.json
+/VMconsole.settings.json
+/web/assets/player-profile.json
+*.replay
+*.replay.part
+*.json.gz
+*.log
+*.previous
+*.new
+
+# Downloaded third-party content and generated builds
+/web/assets/gateway.webp
+/runtime/
+/dist/
+/ReplayRadar.exe
+/ReplayRadar.Service.exe
+/ReplayRadar.exe.config
+/ReplayRadar.Service.exe.config
+/decoder/bin/
+/decoder/next-bin/
+/decoder/obj/
+/decoder/*-result.json
+__pycache__/
+*.pyc
+
+# Local research and previews
+/qa/
+/map-reference/
+/reference-*/
+/next-web/
+/web/writecheck.txt
+.vs/
+.vscode/

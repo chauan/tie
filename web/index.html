@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0c1110"><title>Gateway · Replay Radar</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='12' fill='%230c1110'/%3E%3Ccircle cx='20' cy='20' r='12' fill='none' stroke='%2399dfbd' stroke-width='2'/%3E%3Cpath d='M20 7v13l8 8' fill='none' stroke='%2399dfbd' stroke-width='2'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/features.css"><script src="/projection.js" defer></script><script src="/replay-model.js" defer></script><script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Replay Radar"><span class="brand-icon">◉</span><span>REPLAY<span class="brand-light"> RADAR</span></span></a>
+    <div class="top-middle"><span class="tiny-dot"></span> THE ISLE <span class="divider">/</span> GATEWAY</div>
+    <button class="text-button" id="settingsBtn"><span aria-hidden="true">⚙</span> Nguồn replay</button>
+  </header>
+  <main>
+    <div class="page-heading"><div><p class="eyebrow">FIELD OBSERVATION / 01</p><h1>Gateway<span class="heading-dot">.</span></h1><p class="subtitle">Theo dấu thế giới trong bản ghi của bạn.</p></div>
+      <div class="sync-block"><div class="sync-state"><span class="status-light" id="statusLight"></span><span id="syncState">Đang kết nối service</span></div><p id="nextSync">Tự đồng bộ mỗi 3 phút</p><button id="syncBtn" class="primary-button"><span id="syncIcon">↻</span> Đồng bộ ngay</button></div>
+    </div>
+    <div id="notice" class="notice" role="status" hidden></div>
+    <section class="stats" aria-label="Thống kê replay">
+      <div class="stat"><span class="stat-label">NGƯỜI CHƠI <span class="color-dot player-dot"></span></span><strong id="playerCount">—</strong><span class="stat-caption">có vị trí trong phạm vi ghi</span></div>
+      <div class="stat"><span class="stat-label">ĐỘNG VẬT AI <span class="color-dot ai-dot"></span></span><strong id="aiCount">—</strong><span class="stat-caption">có vị trí trong phạm vi ghi</span></div>
+      <div class="stat"><span class="stat-label">THỜI LƯỢNG BẢN GHI</span><strong id="duration">—<small>phút</small></strong><span id="replayName" class="stat-caption">Đợi bản ghi đầu tiên</span></div>
+      <div class="stat"><span class="stat-label">BẢN SAO GẦN NHẤT</span><strong id="updatedTime" class="stat-time">—</strong><span id="sourceAge" class="stat-caption">Đồng bộ từ The Isle</span></div>
+    </section>
+    <section class="replay-tools" aria-label="Lịch sử và xuất dữ liệu">
+      <div class="snapshot-picker"><label for="snapshotSelect">BẢN SAO REPLAY</label><select id="snapshotSelect"><option value="">Mới nhất · tự cập nhật</option></select><span id="snapshotBadge" class="snapshot-badge">MỚI NHẤT</span></div>
+      <div class="export-tools"><button id="liveSnapshotBtn" class="tool-button">↻ Về mới nhất</button><span class="tools-divider"></span><span>Xuất</span><button id="exportCsv" class="tool-button" disabled>CSV ↓</button><button id="exportJson" class="tool-button" disabled>JSON ↓</button></div>
+    </section>
+    <section id="proximityPanel" class="proximity-panel" aria-label="Khoảng cách và cảnh báo quanh tài khoản được chọn">
+      <div class="proximity-heading"><div><p class="eyebrow">RADAR CỦA BẠN <span id="proximityMode" class="snapshot-badge">REPLAY</span></p><strong id="proximitySummary" role="status" aria-live="polite">Chọn SteamID để bật radar quanh bạn.</strong></div><button id="nearbyFocusBtn" class="tool-button" disabled>⌖ Xem quanh tôi</button></div>
+      <form id="profileForm" class="profile-form"><label>SteamID làm tâm radar<input id="profileSteam" type="text" inputmode="numeric" pattern="[0-9]{17}" maxlength="17" list="profileCandidates" placeholder="Nhập 17 chữ số hoặc chọn người chơi" required autocomplete="off"><datalist id="profileCandidates"></datalist></label><label>Tên gợi nhớ<input id="profileName" type="text" maxlength="60" placeholder="Không bắt buộc"></label><button id="profileSave" class="tool-button" type="submit">Lưu tài khoản</button><button id="profileClear" class="text-button small" type="button">Bỏ chọn</button><span id="profileCurrent" class="profile-current"></span></form><p id="profileError" class="error-text" role="status"></p>
+      <div class="proximity-controls"><label><input id="proximityEnabled" type="checkbox" checked> Cảnh báo gần</label><label for="proximityRadius">Bán kính <input id="proximityRadius" type="number" min="10" max="5000" step="10" value="500"> m</label><select id="proximityKind" aria-label="Loại đối tượng cảnh báo"><option value="all">Người chơi + AI</option><option value="player">Người chơi khác</option><option value="ai">Chỉ AI</option></select><label><input id="proximityArrows" type="checkbox" checked> Mũi tên trên bản đồ</label><label><input id="proximitySound" type="checkbox"> Âm thanh</label></div>
+      <div class="radar-levels" id="radarLevels" aria-label="Các mức cảnh báo"></div>
+      <div id="nearbyList" class="nearby-list"></div><p id="proximityHint" class="proximity-hint">Chọn SteamID để tính khoảng cách; tài khoản cần có vị trí trong replay. Dữ liệu cập nhật mỗi 3 phút.</p>
+      <div class="radar-extras">
+        <details id="teammatesDetails" class="radar-details"><summary>Đồng đội <span id="teammateCount" class="count-badge">0</span></summary><div class="radar-details-body"><label class="teammate-ignore"><input id="ignoreFriends" type="checkbox" checked> Bỏ cảnh báo đồng đội</label><form id="teammateForm" class="teammate-form"><label>SteamID 64<input id="teammateSteam" type="text" inputmode="numeric" pattern="[0-9]{17}" maxlength="17" placeholder="7656…" required></label><label>Tên gợi nhớ<input id="teammateName" type="text" maxlength="60" placeholder="Tên đồng đội"></label><button class="tool-button" type="submit">Lưu đồng đội</button></form><p id="teammateError" class="error-text" role="status"></p><div id="teammateList" class="teammate-list"></div><p class="proximity-hint">Nhận diện bằng SteamID khi đổi tên hoặc nhân vật; điểm màu xanh dương là đồng đội.</p></div></details>
+        <details id="alertLogDetails" class="radar-details"><summary>Nhật ký cảnh báo <span id="alertLogCount" class="count-badge">0</span></summary><div class="radar-details-body"><div class="alert-log-heading"><span class="tool-hint">Ghi khi web đang mở · lưu tối đa 200 mục trên trình duyệt này.</span><button id="clearAlertLog" class="text-button small" type="button">Xóa nhật ký</button></div><div id="alertLog" class="alert-log"></div></div></details>
+      </div>
+    </section>
+    <section class="workspace">
+      <div class="map-panel">
+        <div class="panel-heading"><div class="panel-title"><span class="panel-number">01</span> Bản đồ quan sát <span class="map-badge">GATEWAY</span></div><button class="text-button small" id="focusBtn">⌖ Tập trung đối tượng</button></div>
+        <div class="map-filters"><button class="filter-chip active" id="playersToggle" aria-pressed="true"><i class="color-dot player-dot"></i>Người chơi <span id="playerChip">0</span></button><button class="filter-chip active" id="aiToggle" aria-pressed="true"><i class="color-dot ai-dot"></i>AI <span id="aiChip">0</span></button><label class="history-toggle"><input type="checkbox" id="historyToggle"> Vị trí đã rời phạm vi</label></div>
+        <div class="map-actions"><button id="meBtn" class="tool-button">⌖ Vị trí của tôi</button><button id="followBtn" class="tool-button" disabled>◎ Theo dõi mục tiêu</button><button id="stopFollowBtn" class="tool-button" hidden>Dừng theo dõi ×</button><span class="tools-divider"></span><button id="measureBtn" class="tool-button" aria-pressed="false">↔ Đo khoảng cách</button><button id="clearMeasureBtn" class="tool-button" hidden>Xóa phép đo</button><span id="measureStatus" class="tool-hint"></span></div>
+        <div id="mapContainer" class="map-container">
+          <svg id="mapSvg" viewBox="0 0 3900 3908" role="img" aria-label="Bản đồ Gateway; kéo để di chuyển, lăn chuột để phóng to">
+            <image href="/assets/gateway.webp" x="0" y="0" width="3900" height="3908"/>
+            <g id="proximityOverlay" aria-hidden="true"></g><g id="routes"></g><g id="measurements"></g><g id="markers"></g>
+          </svg>
+          <div class="map-corner"><span class="map-corner-line"></span>N<span class="map-coordinate" id="cursorCoord">X — / Y —</span></div>
+          <div class="zoom-controls"><button id="zoomIn" aria-label="Phóng to">+</button><button id="zoomOut" aria-label="Thu nhỏ">−</button><button id="fitBtn" aria-label="Xem toàn bộ đảo">⛶</button></div>
+          <div id="mapEmpty" class="map-empty">Đang đọc bản ghi đầu tiên…</div>
+          <div class="map-credit">Bản đồ: <a href="https://vulnona.com/game/map/" target="_blank" rel="noreferrer">VulnonaMAP</a> · v0.21.7</div>
+        </div>
+        <div class="map-footer"><span><i class="color-dot player-dot"></i>Người chơi <i class="color-dot ai-dot"></i>AI <i class="color-dot teammate-dot"></i>Đồng đội <i class="color-dot ghost-dot"></i>Thấy lần cuối</span><span id="frameTime">Vị trí cuối bản ghi</span></div>
+        <div class="timeline-panel"><div class="timeline-top"><span class="eyebrow">DIỄN BIẾN REPLAY</span><span id="timelineResolution" class="tool-hint">Đang đọc lịch sử…</span></div><div class="timeline-controls"><button id="playBtn" class="play-button" aria-label="Phát timeline" disabled>▶</button><span id="timelineTime" class="timeline-time">00:00</span><input id="timeline" type="range" min="0" max="1" value="1" step="0.1" aria-label="Thời điểm trong replay" disabled><span id="timelineEnd" class="timeline-time">00:00</span><select id="playbackSpeed" aria-label="Tốc độ phát"><option value="1">1×</option><option value="4">4×</option><option value="16">16×</option></select><button id="jumpEndBtn" class="tool-button">Về cuối</button></div><div class="trail-controls"><label><input type="checkbox" id="trailToggle" checked> Hành trình mục tiêu</label><select id="trailWindow" aria-label="Độ dài hành trình"><option value="60">1 phút</option><option value="300" selected>5 phút</option><option value="0">Toàn bộ bản ghi</option></select><span id="trailSummary" class="tool-hint">Chọn một đối tượng để xem đường di chuyển.</span></div><div id="followStatus" class="follow-status" hidden></div></div>
+      </div>
+      <aside class="entity-panel">
+        <div class="panel-heading"><div class="panel-title"><span class="panel-number">02</span> Đối tượng <span id="listCount" class="count-badge">0</span></div><span class="mono-label">REPLAY</span></div>
+        <div class="search-wrap"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Tìm tên, loài hoặc SteamID…" aria-label="Tìm đối tượng"></div>
+        <div class="advanced-filters"><label>Loài<select id="speciesFilter"><option value="">Tất cả loài</option></select></label><label>Trạng thái<select id="statusFilter"><option value="all">Tất cả</option><option value="active">Trong phạm vi</option><option value="dead">Đã chết</option><option value="lost">Đã rời phạm vi</option></select></label><div class="growth-filter"><span>Growth</span><input id="growthMin" type="number" min="0" max="100" value="0" aria-label="Growth tối thiểu"><span>–</span><input id="growthMax" type="number" min="0" max="100" value="100" aria-label="Growth tối đa"><span>%</span><button id="resetFilters" class="text-button small">Đặt lại</button></div></div>
+        <div class="list-topline"><span>ĐỐI TƯỢNG / LOÀI</span><span>TRẠNG THÁI</span></div>
+        <div id="entityList" class="entity-list"><div class="empty-list">Đang chờ dữ liệu replay.</div></div>
+        <div id="entityDetail" class="entity-detail" hidden></div>
+      </aside>
+    </section>
+    <section class="source-strip"><div class="source-strip-icon">↳</div><div><span class="eyebrow">NGUỒN ĐANG THEO DÕI</span><p id="sourcePath">Đang kết nối…</p><p id="copyPath"></p></div><span class="interval-badge">180s / lần</span></section>
+    <footer class="page-footer"><span>LOCAL OBSERVATION SYSTEM <span class="footer-dot">·</span> Chỉ dữ liệu được ghi trong replay.</span><button class="text-button small" id="detailsBtn">Thông tin bản ghi ↗</button></footer>
+  </main>
+  <dialog id="settingsDialog"><form id="settingsForm"><div class="dialog-heading"><div><p class="eyebrow">THIẾT LẬP</p><h2>Nguồn và bản sao replay</h2></div><button type="button" class="close-button" data-close="settingsDialog" aria-label="Đóng">×</button></div><p class="dialog-copy">Mỗi 3 phút: copy file gốc vào thư mục riêng rồi quét bản sao. File gốc chỉ được đọc để sao chép.</p><label class="field-label" for="sourceInput">Thư mục chứa file .replay gốc</label><input class="text-input" id="sourceInput" required><label class="field-label" for="fileSelect">File trong thư mục được chọn</label><select class="text-input" id="fileSelect"><option value="">Tự động chọn file mới nhất</option></select><label class="field-label" for="copyInput">Thư mục lưu bản sao và quét</label><input class="text-input" id="copyInput" required><p class="help-text">Muốn bấm chọn folder trên máy: mở ReplayRadar.exe. Hai thư mục phải tách riêng; service cần quyền đọc nguồn và ghi bản sao.</p><p id="settingsError" class="error-text" role="alert"></p><button class="primary-button" type="submit">Lưu và đồng bộ</button></form></dialog>
+  <dialog id="detailsDialog"><div class="dialog-heading"><div><p class="eyebrow">DỮ LIỆU NGUỒN</p><h2>Thông tin bản ghi</h2></div><button class="close-button" data-close="detailsDialog" aria-label="Đóng">×</button></div><div id="replayDetails"></div></dialog>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>
