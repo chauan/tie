@@ -34,3 +34,5 @@ __pycache__/
 /web/writecheck.txt
 .vs/
 .vscode/
+/tests/**/bin/
+/tests/**/obj/

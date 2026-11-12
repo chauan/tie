@@ -20,7 +20,9 @@
       if (index < 0) continue;
       const s = samples[index];
       result.push({...entity, x:s[1], y:s[2], z:s[3], in_scope:s[4] === 1,
-        dead:s[5] === -1 ? null : s[5] === 1, growth:s[6], last_seen:s[7]});
+        dead:s[5] === -1 ? null : s[5] === 1, growth:s[6], last_seen:s[7],
+        health:s.length>=12?s[8]:null, max_health:s.length>=12?s[9]:null,
+        health_seen:s.length>=12?s[10]:null, max_health_seen:s.length>=12?s[11]:null});
     }
     return result;
   }
@@ -28,6 +30,14 @@
     return Number.isFinite(e.x) && Number.isFinite(e.y) && !(e.x === 0 && e.y === 0 && e.z === 0);
   }
   function distanceMeters(a, b) { return Math.hypot(a.x - b.x, a.y - b.y) / 100; }
+  function dinoVitals(entity) {
+    const valid = value => Number.isFinite(value) && value >= 0 ? value : null;
+    const health = valid(entity?.health), maximum = valid(entity?.max_health);
+    const maxHealth = maximum !== null && maximum > 0 ? maximum : null;
+    const dinosaur = typeof entity?.class_path === 'string' && entity.class_path.includes('/Characters/Dinosaurs/');
+    return {health, maxHealth, percent:health!==null&&maxHealth!==null?health/maxHealth*100:null,
+      estimatedWeightKg:dinosaur?maxHealth:null, healthSeen:valid(entity?.health_seen), maxHealthSeen:valid(entity?.max_health_seen)};
+  }
   function aiDensity(entities, options = {}) {
     const cellMeters = [250, 500, 1000].includes(options.cellMeters) ? options.cellMeters : 500;
     const units = cellMeters * 100, bounds = options.bounds || {};
@@ -152,18 +162,20 @@
       .sort((a, b) => Number(b.in_scope && !b.dead) - Number(a.in_scope && !a.dead) || b.last_seen - a.last_seen)[0] || null;
   }
   function csv(entities, time) {
-    const columns = ['time_seconds','actor_id','name','steam_id','kind','species','x_cm','y_cm','z_cm','growth_percent','in_scope','dead','last_seen_seconds'];
+    const columns = ['time_seconds','actor_id','name','steam_id','kind','species','x_cm','y_cm','z_cm','growth_percent','in_scope','dead','last_seen_seconds',
+      'health_hp','max_health_hp','health_percent','estimated_weight_kg_from_max_health','health_observed_at_seconds','max_health_observed_at_seconds'];
     const cell = value => {
       if (value === null || value === undefined) return '""';
       let text = String(value);
       if (typeof value === 'string' && /^[=+\-@\t\r]/.test(text)) text = "'" + text;
       return '"' + text.replaceAll('"','""') + '"';
     };
-    const rows = entities.map(e => [time,e.id,e.name,e.steam_id,e.kind,e.species,e.x,e.y,e.z,
-      e.growth === null ? null : Math.round(e.growth * 10000) / 100,e.in_scope,e.dead,e.last_seen]);
+    const rows = entities.map(e => { const v=dinoVitals(e); return [time,e.id,e.name,e.steam_id,e.kind,e.species,e.x,e.y,e.z,
+      e.growth === null ? null : Math.round(e.growth * 10000) / 100,e.in_scope,e.dead,e.last_seen,
+      v.health,v.maxHealth,v.percent,v.estimatedWeightKg,v.healthSeen,v.maxHealthSeen]; });
     return '\uFEFF' + [columns, ...rows].map(row => row.map(cell).join(',')).join('\r\n');
   }
-  const api = Object.freeze({sampleIndex, frameEntities, hasPosition, distanceMeters, aiDensity, relativePosition, proximity, proximityLevel, targetIdentity, proximityTransitions, routeSegments, routeDistance, matchesFilters, followTarget, csv});
+  const api = Object.freeze({sampleIndex, frameEntities, hasPosition, distanceMeters, dinoVitals, aiDensity, relativePosition, proximity, proximityLevel, targetIdentity, proximityTransitions, routeSegments, routeDistance, matchesFilters, followTarget, csv});
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.ReplayModel = api;
 })(globalThis);

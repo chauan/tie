@@ -46,6 +46,9 @@ async function chooseProfile(steamId,name=''){
 function isTeammate(e){return e.kind==='player'&&!isSelf(e)&&teammates.some(t=>t.steam_id===e.steam_id);}
 function speciesName(e){return({Coalecanth:'Coelacanth',Fish_Coalacanth:'Cá trong đàn',Deer:'Hươu'})[e.species]||e.species||'Chưa rõ loài';}
 function growthText(e){return Number.isFinite(e.growth)&&e.growth>=0&&e.growth<=1?`${number(e.growth*100)}% trưởng thành`:'Trưởng thành chưa rõ';}
+function healthText(e){const v=M.dinoVitals(e);return v.health!==null?`${number(v.health)}${v.maxHealth!==null?' / '+number(v.maxHealth):''} HP${v.percent!==null?' · '+number(v.percent)+'%':' · chưa có máu tối đa'}`:v.maxHealth!==null?`Chưa có máu hiện tại · tối đa ${number(v.maxHealth)} HP`:'Chưa có trong replay ở mốc này';}
+function weightText(e){const value=M.dinoVitals(e).estimatedWeightKg;return value!==null?`~${number(value)} kg (ước tính từ máu tối đa)`:'Chưa có dữ liệu cân nặng';}
+function compactVitals(e){const v=M.dinoVitals(e);if(v.health===null&&v.maxHealth===null)return'';return healthText(e)+(v.estimatedWeightKg!==null?` · ~${number(v.estimatedWeightKg)} kg (ước tính)`:'');}
 function dinoDescription(e){return `${speciesName(e)} · ${growthText(e)}`;}
 function teammateName(e){return teammates.find(t=>t.steam_id===e.steam_id)?.name||e.name||e.steam_id;}
 function levelName(level){return ['Ngoài bán kính','Chú ý','Ở gần','Rất gần'][level]||'Chú ý';}
@@ -135,11 +138,14 @@ function drawDetails(){
   const e=selectedEntity(),detail=$('entityDetail');detail.replaceChildren();detail.hidden=!e;if(!e){renderFollow();return;}
   detail.append(element('h3','',displayName(e)));
   const rows=[['Loài',speciesName(e)],['Loại',e.kind==='player'?'Người chơi':e.kind==='ai'?'AI':'Chưa xác định'],['SteamID',e.steam_id||'—'],['X / Y (cm)',e.x!==null&&e.y!==null?`${number(e.x)} / ${number(e.y)}`:'—'],['Độ cao Z (cm)',e.z!==null?number(e.z):'—'],['Tăng trưởng',e.growth!==null?`${(e.growth*100).toFixed(1)}%`:'—'],['Thấy ở',clock(e.last_seen)],['Trạng thái',e.dead?'Đã chết':e.in_scope?'Trong phạm vi ghi':'Đã rời phạm vi']];
+  const vitals=M.dinoVitals(e);rows.splice(6,0,['Máu (HP)',healthText(e)],['Cân nặng ước tính',weightText(e)]);
+  const observed=vitals.healthSeen??vitals.maxHealthSeen;if(observed!==null)rows.push(['Máu ghi ở mốc',clock(observed)]);
+  if(vitals.percent!==null){const meter=element('div','entity-health-meter');meter.dataset.level=vitals.percent<=25?'low':vitals.percent<=50?'medium':'high';meter.setAttribute('role','meter');meter.setAttribute('aria-label','Máu đã ghi trong replay');meter.setAttribute('aria-valuemin','0');meter.setAttribute('aria-valuemax',String(vitals.maxHealth));meter.setAttribute('aria-valuenow',String(Math.min(vitals.maxHealth,vitals.health)));const fill=element('span');fill.style.width=`${Math.min(100,Math.max(0,vitals.percent))}%`;meter.append(fill);detail.append(meter);}
   if(viewReplay.tracks)rows.push(['Đường đã ghi',distanceText(M.routeDistance(trailSegments()))]);
   const relative=relativeToMe(e);
   if(relative){rows.push([e.in_scope&&!e.dead?'Cách tài khoản của bạn':'Điểm cuối cách tài khoản của bạn',distanceText(relative.distance)],['Hướng từ tài khoản của bạn',directionText(relative)]);}else if(!isSelf(e))rows.push(['Khoảng cách đến tài khoản của bạn','Chưa có vị trí hiện tại của bạn']);
   if(isTeammate(e))rows.push(['Đồng đội',teammateName(e)]);
-  detailPairs(detail,rows);const actions=element('div','detail-actions'),follow=element('button','tool-button','◎ Theo dõi');follow.onclick=()=>startFollow(e);actions.append(follow);if(e.kind==='player'&&e.steam_id&&!isSelf(e)){const useMe=element('button','tool-button','Dùng làm tâm radar');useMe.onclick=()=>chooseProfile(e.steam_id,e.name||'');actions.append(useMe);}if(e.kind==='player'&&e.steam_id&&!isSelf(e)){const friend=element('button','tool-button',isTeammate(e)?'Bỏ đồng đội':'＋ Đồng đội');friend.onclick=()=>{if(isTeammate(e))removeTeammate(e.steam_id);else saveTeammate(e.steam_id,e.name||'');};actions.append(friend);}detail.append(actions);renderFollow();
+  detailPairs(detail,rows);if(vitals.estimatedWeightKg!==null)detail.append(element('p','vitals-note','Cân nặng là ước tính theo máu tối đa của khủng long; chưa đọc được giá trị kg riêng trong replay.'));const actions=element('div','detail-actions'),follow=element('button','tool-button','◎ Theo dõi');follow.onclick=()=>startFollow(e);actions.append(follow);if(e.kind==='player'&&e.steam_id&&!isSelf(e)){const useMe=element('button','tool-button','Dùng làm tâm radar');useMe.onclick=()=>chooseProfile(e.steam_id,e.name||'');actions.append(useMe);}if(e.kind==='player'&&e.steam_id&&!isSelf(e)){const friend=element('button','tool-button',isTeammate(e)?'Bỏ đồng đội':'＋ Đồng đội');friend.onclick=()=>{if(isTeammate(e))removeTeammate(e.steam_id);else saveTeammate(e.steam_id,e.name||'');};actions.append(friend);}detail.append(actions);renderFollow();
 }
 function currentAiDensity(){
   const entities=allEntities(),key=`${frameGeneration}:${aiDensitySettings.cellMeters}:${aiDensitySettings.species}`;
@@ -193,6 +199,7 @@ function renderEntities(){
   const fragment=document.createDocumentFragment();
   for(const e of entities){const ghost=!e.in_scope||e.dead,row=element('button',`entity-row${selected===e.id?' selected':''}${ghost?' ghost':''}${isTeammate(e)?' teammate':''}`);row.setAttribute('aria-pressed',String(selected===e.id));
     const avatar=element('span',`entity-avatar ${e.kind==='ai'?'ai':''}`,e.kind==='player'?'P':e.kind==='ai'?'AI':'?'),text=element('span','entity-text');text.append(element('span','entity-name',displayName(e)),element('span','entity-species',`${speciesName(e)}${e.growth!==null?` · ${Math.round(e.growth*100)}%`:''}`));
+    const vitals=compactVitals(e);if(vitals)text.append(element('span','entity-vitals',vitals));
     const relative=relativeToMe(e);if(relative){const distance=element('span',`entity-distance${!ghost&&relative.distance<=proximitySettings.radius?' close':''}`);distance.append(directionArrow(relative),document.createTextNode(`${ghost?'Điểm cuối · ':''}${distanceText(relative.distance)} · ${relative.direction}`));text.append(distance);}
     const status=element('span',`entity-status ${e.kind==='ai'?'ai':''} ${ghost?'ghost':''}`,!position(e)?'CHƯA CÓ XY':e.dead?'ĐÃ CHẾT':!e.in_scope?'LẦN CUỐI':isTeammate(e)?'ĐỒNG ĐỘI':e.kind==='ai'?'AI':'NGƯỜI CHƠI');row.append(avatar,text,status);row.onclick=()=>selectEntity(e.id);fragment.append(row);
   }list.append(fragment);renderProximity();renderAiDensity();drawMarkers();drawDetails();

@@ -23,6 +23,10 @@ public class Entity
     public bool? IsAI { get; set; }
     public bool? Dead { get; set; }
     public double? Growth { get; set; }
+    public double? Health { get; set; }
+    public double? MaxHealth { get; set; }
+    public double? HealthSeen { get; set; }
+    public double? MaxHealthSeen { get; set; }
     public double? X { get; set; }
     public double? Y { get; set; }
     public double? Z { get; set; }
@@ -51,12 +55,13 @@ public class IsleReader : ReplayReader<Replay>
 {
     public readonly Dictionary<uint, Entity> Entities = new();
     public readonly Dictionary<uint, string> PlayerNames = new();
-    // Compact sampled history: t, x, y, z, in_scope, dead(-1=unknown), growth, last_movement.
+    // t, x, y, z, scope, dead(-1=unknown), growth, last_movement, hp, max_hp, hp_seen, max_hp_seen.
     public readonly Dictionary<uint, List<double?[]>> Tracks = new();
     public double HistorySampleSeconds = 1;
     private int historyPoints;
     public double Time;
     public int Frames, Movements, FailedMovements, Properties;
+    public int VitalUpdates, UnsupportedVitalFields;
     public Replay Result => Replay;
     public IsleReader(ILogger logger) : base(logger, ParseMode.Full) { Replay = new Replay(); }
 
@@ -94,7 +99,7 @@ public class IsleReader : ReplayReader<Replay>
         if (!force && samples.Count > 0 && !sameTime && Time - samples[^1][0]!.Value < HistorySampleSeconds) return;
         double?[] sample = [Math.Round(Time, 4), e.X, e.Y, e.Z, e.InScope ? 1 : 0,
             e.Dead.HasValue ? (e.Dead.Value ? 1 : 0) : -1, e.Growth.HasValue ? Math.Round(e.Growth.Value, 6) : null,
-            Math.Round(e.LastSeen, 4)];
+            Math.Round(e.LastSeen, 4), e.Health, e.MaxHealth, e.HealthSeen, e.MaxHealthSeen];
         if (sameTime) samples[^1] = sample;
         else { samples.Add(sample); historyPoints++; }
         if (historyPoints > 600_000) CompactHistory();
@@ -112,7 +117,10 @@ public class IsleReader : ReplayReader<Replay>
             for (int i = 1; i < old.Count - 1; i++)
             {
                 var sample = old[i];
-                bool transition = sample[4] != old[i - 1][4] || sample[5] != old[i - 1][5];
+                var previous = old[i - 1];
+                bool transition = sample[4] != previous[4] || sample[5] != previous[5]
+                    || sample[8].HasValue != previous[8].HasValue || sample[9].HasValue != previous[9].HasValue
+                    || sample[8] == 0 && previous[8] > 0;
                 if (transition || sample[0] - kept[^1][0] >= HistorySampleSeconds) kept.Add(sample);
             }
             kept.Add(old[^1]); Tracks[id] = kept; historyPoints += kept.Count;
@@ -151,6 +159,11 @@ public class IsleReader : ReplayReader<Replay>
     public override bool ReceivedReplicatorBunch(DataBunch bunch, FBitArchive archive, uint? repObject, bool layout)
     {
         var group = _netGuidCache.GetNetFieldExportGroup(repObject);
+        // Stably named subobjects export the instance name, not their native class.
+        if (group == null && repObject.HasValue && _netGuidCache.TryGetPathName(repObject.Value, out var path)
+            && path == "AttributeSetBase" && GetEntity(bunch.ChIndex) is {} creature
+            && VitalsLayout.AttributeGroupFor(creature.ClassPath) is {} attributePath)
+            _netGuidCache.NetFieldExportGroupMap.TryGetValue(attributePath, out group);
         if (layout && group != null) ReceiveProperties(archive, group, bunch.ChIndex, out _);
         archive.SkipBits(archive.GetBitsLeft());
         return !archive.IsError;
@@ -170,8 +183,23 @@ public class IsleReader : ReplayReader<Replay>
             var count = archive.ReadIntPacked();
             if (count > archive.GetBitsLeft()) return false;
             if (!group.IsValidIndex(handle)) { archive.SkipBits(count); continue; }
-            var field = group.NetFieldExports[handle]?.Name;
+            var fieldExport = group.NetFieldExports[handle];
+            var field = fieldExport?.Name;
             if (count == 0) continue;
+            if (entity != null && VitalsLayout.IsAttributeGroup(group.PathName) && field == "CurrentValue" && handle is 1 or 3)
+            {
+                var bytes = archive.ReadBits(count);
+                if (VitalsLayout.TryField(group.PathName, (uint)archive.EngineNetworkVersion, handle, field, fieldExport!.CompatibleChecksum, out var vital)
+                    && VitalsLayout.TryValue(bytes, count, out var value))
+                {
+                    bool transition = false;
+                    if (vital == VitalField.Health) { transition = !entity.Health.HasValue || value == 0 && entity.Health > 0; entity.Health = value; entity.HealthSeen = Math.Round(Time, 4); }
+                    else { transition = !entity.MaxHealth.HasValue; entity.MaxHealth = value; entity.MaxHealthSeen = Math.Round(Time, 4); }
+                    RecordState(entity, transition); VitalUpdates++;
+                }
+                else UnsupportedVitalFields++;
+                continue;
+            }
             var wanted = entity != null && field is "ReplicatedMovement" or "SteamId" or "PlayerState" or "bIsAIControlled" or "bIsDead" or "Growth";
             var playerName = field == "PlayerNamePrivate" && group.PathName.Contains("BP_PlayerState");
             if (!wanted && !playerName) { archive.SkipBits(count); continue; }
@@ -277,9 +305,10 @@ public class Program
             reader.Parse(args[0]);
             Console.WriteLine(JsonSerializer.Serialize(new {
                 entities = reader.Entities.Values, time_seconds = reader.Time, tracks = reader.Tracks,
-                history_sample_seconds = reader.HistorySampleSeconds, history_schema = 1,
+                history_sample_seconds = reader.HistorySampleSeconds, history_schema = 2,
                 diagnostics = new { frames = reader.Frames, movements = reader.Movements, failed_movements = reader.FailedMovements,
-                    properties = reader.Properties, warnings = log.WarningCount, samples = log.Samples }
+                    properties = reader.Properties, health_updates = reader.VitalUpdates, unsupported_health_fields = reader.UnsupportedVitalFields,
+                    warnings = log.WarningCount, samples = log.Samples }
             }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower }));
             return 0;
         }

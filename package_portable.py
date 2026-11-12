@@ -8,7 +8,7 @@ import argparse
 
 ROOT = Path(__file__).resolve().parent
 FILES = ('replay_service.py','runtime.ps1','launch.ps1','service.ps1','setup.ps1','bootstrap-python.ps1',
-         'start.cmd','stop.cmd','doctor.ps1','check.cmd','README.md','PORTABLE.md','MAP-SOURCES.md')
+         'start.cmd','stop.cmd','doctor.ps1','check.cmd','README.md','PORTABLE.md','MAP-SOURCES.md','VITALS-SOURCES.md')
 
 
 def build(web_root=None, windows_service=False, console_script=False):
@@ -21,9 +21,9 @@ def build(web_root=None, windows_service=False, console_script=False):
     if folder.exists():
         raise FileExistsError('Release folder already exists. Choose a clean dist directory before rebuilding.')
     folder.mkdir()
-    files = ('replay_service.py','ReplayRadar.exe','ReplayRadar.Service.exe','ReplayRadar.exe.config','ReplayRadar.Service.exe.config','WINDOWS-SERVICE.md','MAP-SOURCES.md') if windows_service else FILES
+    files = ('replay_service.py','ReplayRadar.exe','ReplayRadar.Service.exe','ReplayRadar.exe.config','ReplayRadar.Service.exe.config','WINDOWS-SERVICE.md','MAP-SOURCES.md','VITALS-SOURCES.md') if windows_service else FILES
     if console_script:
-        files = ('VMconsole.cmd','VMconsole.ps1','runtime.ps1','replay_service.py','MAP-SOURCES.md')
+        files = ('VMconsole.cmd','VMconsole.ps1','runtime.ps1','replay_service.py','MAP-SOURCES.md','VITALS-SOURCES.md')
     for name in files:
         shutil.copy2(ROOT / name, folder / name)
     shutil.copytree(web_root or ROOT / 'web', folder / 'web', ignore=shutil.ignore_patterns('player-profile.json'))

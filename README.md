@@ -36,6 +36,7 @@ Hoặc truyền đường dẫn trực tiếp:
 - Bản đồ Gateway, vị trí người chơi và AI có trong replay.
 - Mục **Khu đông AI**: tô mật độ theo ô 250, 500 hoặc 1.000 m; xếp hạng top 5 hoặc xem toàn bộ ô có AI, lọc theo loài và bấm một ô để phóng tới trên map. Số lượng đổi theo mốc timeline; không tính AI đã chết hoặc mất dấu. Khoảng cách/hướng tới tâm ô chỉ hiện khi có vị trí tài khoản được chọn tại cùng mốc.
 - Nhập SteamID 17 chữ số để chọn tâm radar; không cài sẵn tài khoản.
+- Bấm một dino để xem **máu hiện tại/tối đa, % HP và thanh máu** tại mốc đang xem. Cân nặng có nhãn **ước tính từ máu tối đa**, chỉ áp dụng cho lớp khủng long; chưa có nguồn kg riêng được xác minh. Không gán cân nặng của động vật AI từ HP. Xem cách đọc và giới hạn tại [VITALS-SOURCES.md](VITALS-SOURCES.md).
 - Khoảng cách, hướng, mũi tên và cảnh báo gần với tên loài, phần trăm trưởng thành khi replay có dữ liệu.
 - Mặc định cảnh báo người chơi và AI trong 500 m; có bộ lọc, đồng đội, âm thanh và nhật ký.
 - Xem lịch sử, tua timeline, đường di chuyển, theo dõi đối tượng, đo khoảng cách và xuất CSV/JSON.
@@ -58,9 +59,15 @@ node .\tests\test_projection.cjs
 node .\tests\test_replay_model.cjs
 node .\tests\test_proximity.cjs
 node .\tests\test_ai_density.cjs
+node .\tests\test_vitals.cjs
+.\runtime\dotnet\dotnet.exe run --project .\tests\VitalsDecoderChecks -c Release
 ```
 
 Khi web đang chạy, `tests/browser_ai_density.py` kiểm tra dữ liệu thật qua API chỉ đọc, rồi kiểm tra giao diện với dữ liệu giả trong một browser context riêng. Kiểm tra này cần Python có Playwright và Chrome; ảnh kiểm tra lưu trong `qa/`, không đưa lên Git.
+
+`tests/browser_vitals.py` kiểm tra HP trên bản replay có dữ liệu máu, rồi kiểm tra tua timeline, dữ liệu thiếu/cũ, nhãn cân nặng ước tính, CSV và màn hình nhỏ bằng dữ liệu giả trong context riêng.
+
+Sau khi cập nhật mã nguồn có thay đổi decoder, chạy `powershell -NoProfile -ExecutionPolicy Bypass -File .\setup.ps1 -Rebuild`. Bản sao cũ dùng lịch sử schema 1 sẽ hiện chưa có chỉ số HP; kết quả giải mã mới dùng schema 2. Máu hiển thị là giá trị cuối cùng được ghi ở hoặc trước mốc đang xem, kèm thời điểm quan sát trong bảng chi tiết.
 
 Tạo ZIP script kèm runtime để chép sang máy Windows x64 khác:
 
