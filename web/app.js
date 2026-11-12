@@ -5,6 +5,8 @@ let state=null,calibration=null,playerProfile=null,viewReplay=null,archiveId='',
 let selected=null,selectedIdentity=null,showPlayers=true,showAI=true,offline=false,initializedMap=false;
 let view={x:0,y:0,width:3900,height:3908},frameCache=null,frameCacheKey='',loadingReplayId=null,loadToken=0;
 let frameGeneration=0,profileRequestToken=0;
+let aiDensitySettings={enabled:true,cellMeters:500,species:''},aiDensityCache=null,aiDensityCacheKey='',aiDensitySelected=null,aiDensityExpanded=false;
+try{const saved=JSON.parse(localStorage.getItem('isle-ai-density')||'null');if(saved&&typeof saved==='object'){if(typeof saved.enabled==='boolean')aiDensitySettings.enabled=saved.enabled;if([250,500,1000].includes(saved.cellMeters))aiDensitySettings.cellMeters=saved.cellMeters;if(typeof saved.species==='string')aiDensitySettings.species=saved.species;}}catch(_){}
 let playing=false,playbackLast=0,measurementMode=false,measurementPoints=[],drag=null,suppressMapClick=false,followKey=null;
 try{followKey=JSON.parse(localStorage.getItem('isle-follow-target')||'null');}catch(_){}
 let proximitySettings={enabled:true,radius:500,kind:'all',arrows:true,sound:false,ignoreFriends:true};
@@ -139,6 +141,52 @@ function drawDetails(){
   if(isTeammate(e))rows.push(['Đồng đội',teammateName(e)]);
   detailPairs(detail,rows);const actions=element('div','detail-actions'),follow=element('button','tool-button','◎ Theo dõi');follow.onclick=()=>startFollow(e);actions.append(follow);if(e.kind==='player'&&e.steam_id&&!isSelf(e)){const useMe=element('button','tool-button','Dùng làm tâm radar');useMe.onclick=()=>chooseProfile(e.steam_id,e.name||'');actions.append(useMe);}if(e.kind==='player'&&e.steam_id&&!isSelf(e)){const friend=element('button','tool-button',isTeammate(e)?'Bỏ đồng đội':'＋ Đồng đội');friend.onclick=()=>{if(isTeammate(e))removeTeammate(e.steam_id);else saveTeammate(e.steam_id,e.name||'');};actions.append(friend);}detail.append(actions);renderFollow();
 }
+function currentAiDensity(){
+  const entities=allEntities(),key=`${frameGeneration}:${aiDensitySettings.cellMeters}:${aiDensitySettings.species}`;
+  if(key!==aiDensityCacheKey){aiDensityCacheKey=key;aiDensityCache=M.aiDensity(entities,{...aiDensitySettings,bounds:calibration});}
+  return aiDensityCache;
+}
+function saveAiDensitySettings(){try{localStorage.setItem('isle-ai-density',JSON.stringify(aiDensitySettings));}catch(_){} }
+function updateAiDensitySpecies(){
+  const select=$('aiDensitySpecies'),signature=viewReplay?.id||'';if(select.dataset.replay===signature)return;select.dataset.replay=signature;
+  select.replaceChildren();const all=element('option','','Tất cả loài AI');all.value='';select.append(all);
+  const species=[...new Set((viewReplay?.entities||[]).filter(e=>e.kind==='ai').map(e=>e.species||''))].sort();
+  for(const name of species){if(!name)continue;const option=element('option','',speciesName({species:name}));option.value=name;select.append(option);}
+  if(viewReplay&&!species.includes(aiDensitySettings.species))aiDensitySettings.species='';select.value=aiDensitySettings.species;
+}
+function aiCellLabel(cell){return `Ô ${cell.col+1}–${cell.row+1}`;}
+function renderAiDensity(){
+  updateAiDensitySpecies();const report=currentAiDensity(),proximity=currentProximity(),owner=proximity.available?proximity.owner:null;
+  $('aiDensitySummary').textContent=!viewReplay?'Đang chờ dữ liệu replay.':`${number(report.total)} AI · ${report.cells.length} ô có AI · Mốc ${clock(currentTime())}${viewTime===null?' · cuối bản ghi':''}`;
+  $('aiDensityFit').disabled=!report.cells.length;$('aiDensityMore').hidden=report.cells.length<=5;$('aiDensityMore').setAttribute('aria-expanded',String(aiDensityExpanded));$('aiDensityMore').textContent=aiDensityExpanded?'Thu gọn về 5 ô đông nhất':`Xem tất cả ${report.cells.length} ô`;
+  const rows=(aiDensityExpanded?report.cells:report.cells.slice(0,5)).map(cell=>({cell,relative:owner?M.relativePosition(owner,cell):null}));
+  const signature=JSON.stringify([aiDensitySelected,aiDensityExpanded,report.cellMeters,rows.map(({cell,relative})=>[cell.id,cell.count,cell.species,relative?distanceText(relative.distance)+' '+directionText(relative):''])]);
+  const list=$('aiDensityList');if(list.dataset.signature===signature)return;list.dataset.signature=signature;list.replaceChildren();
+  if(!rows.length){list.append(element('p','ai-density-empty',viewReplay?'Chưa có AI phù hợp đang trong phạm vi ghi ở mốc này.':'Chờ bản replay đầu tiên để thống kê.'));return;}
+  rows.forEach(({cell,relative},index)=>{
+    const button=element('button',`ai-density-card${cell.id===aiDensitySelected?' selected':''}`);button.type='button';button.dataset.cellId=cell.id;button.setAttribute('aria-pressed',String(cell.id===aiDensitySelected));
+    const heading=element('span','ai-density-card-heading');heading.append(element('span','',`${String(index+1).padStart(2,'0')} · ${aiCellLabel(cell)}`),element('strong','',`${cell.count} AI`));
+    const names=cell.species.slice(0,3).map(s=>`${speciesName({species:s.name})} ×${s.count}`).join(' · ')+(cell.species.length>3?` · +${cell.species.length-3} loài`:'');
+    const direction=element('span','ai-density-direction');if(relative){direction.append(directionArrow(relative),document.createTextNode(`~${distanceText(relative.distance)} · ${relative.direction}`));}else direction.textContent='Chưa có vị trí của bạn ở mốc này';
+    button.append(heading,element('span','ai-density-species',names),direction);button.onclick=()=>focusAiDensity(cell.id);list.append(button);
+  });
+}
+function drawAiDensity(){
+  const group=$('aiDensityOverlay');group.replaceChildren();if(!aiDensitySettings.enabled||!calibration)return;
+  const report=currentAiDensity(),scale=view.width/Math.max(1,svg.clientWidth),fragment=document.createDocumentFragment();
+  for(const cell of report.cells){
+    const b=cell.bounds,a=GatewayProjection.worldToPixel({x:b.xMin,y:b.yMin},calibration),z=GatewayProjection.worldToPixel({x:b.xMax,y:b.yMax},calibration),ratio=cell.count/report.maxCount;
+    const color=ratio>.66?'#fa775f':ratio>.33?'#f5ac5d':'#e8cf70',chosen=cell.id===aiDensitySelected;
+    fragment.append(svgEl('rect',{class:'ai-density-cell','data-cell-id':cell.id,x:a.x,y:a.y,width:z.x-a.x,height:z.y-a.y,fill:color,'fill-opacity':.12+.3*ratio,stroke:chosen?'#d4ffe1':color,'stroke-opacity':chosen?1:.65,'stroke-width':(chosen?2.5:1)*scale}));
+    if((z.x-a.x)/scale>=25){const label=svgEl('text',{x:(a.x+z.x)/2,y:(a.y+z.y)/2,'font-size':11*scale,'stroke-width':3*scale,'text-anchor':'middle','dominant-baseline':'central',class:'ai-density-count'});label.textContent=String(cell.count);fragment.append(label);}
+  }group.append(fragment);
+}
+function focusAiDensity(id=null){
+  const report=currentAiDensity(),cells=id?report.cells.filter(c=>c.id===id):report.cells;if(!cells.length||!calibration)return;
+  aiDensitySelected=id;aiDensitySettings.enabled=true;$('aiDensityToggle').checked=true;saveAiDensitySettings();saveFollow(null);
+  const xMin=Math.min(...cells.map(c=>c.bounds.xMin)),xMax=Math.max(...cells.map(c=>c.bounds.xMax)),yMin=Math.min(...cells.map(c=>c.bounds.yMin)),yMax=Math.max(...cells.map(c=>c.bounds.yMax));
+  const a=GatewayProjection.worldToPixel({x:xMin,y:yMin},calibration),b=GatewayProjection.worldToPixel({x:xMax,y:yMax},calibration);fitBounds(a.x,a.y,b.x-a.x,b.y-a.y,id?1.65:1.15);drawAiDensity();renderAiDensity();$('mapContainer').scrollIntoView({block:'center',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
+}
 function renderEntities(){
   const entities=filteredEntities(),list=$('entityList');$('listCount').textContent=entities.length;list.replaceChildren();
   if(!entities.length)list.append(element('div','empty-list',viewReplay?'Không có đối tượng phù hợp ở thời điểm và bộ lọc này.':'Đang chờ dữ liệu replay.'));
@@ -147,7 +195,7 @@ function renderEntities(){
     const avatar=element('span',`entity-avatar ${e.kind==='ai'?'ai':''}`,e.kind==='player'?'P':e.kind==='ai'?'AI':'?'),text=element('span','entity-text');text.append(element('span','entity-name',displayName(e)),element('span','entity-species',`${speciesName(e)}${e.growth!==null?` · ${Math.round(e.growth*100)}%`:''}`));
     const relative=relativeToMe(e);if(relative){const distance=element('span',`entity-distance${!ghost&&relative.distance<=proximitySettings.radius?' close':''}`);distance.append(directionArrow(relative),document.createTextNode(`${ghost?'Điểm cuối · ':''}${distanceText(relative.distance)} · ${relative.direction}`));text.append(distance);}
     const status=element('span',`entity-status ${e.kind==='ai'?'ai':''} ${ghost?'ghost':''}`,!position(e)?'CHƯA CÓ XY':e.dead?'ĐÃ CHẾT':!e.in_scope?'LẦN CUỐI':isTeammate(e)?'ĐỒNG ĐỘI':e.kind==='ai'?'AI':'NGƯỜI CHƠI');row.append(avatar,text,status);row.onclick=()=>selectEntity(e.id);fragment.append(row);
-  }list.append(fragment);renderProximity();drawMarkers();drawDetails();
+  }list.append(fragment);renderProximity();renderAiDensity();drawMarkers();drawDetails();
 }
 function drawMarkers(){
   const group=$('markers');group.replaceChildren();const scale=view.width/Math.max(1,svg.clientWidth),fragment=document.createDocumentFragment();lastMarkerScale=scale;
@@ -157,7 +205,7 @@ function drawMarkers(){
     if(isSelf(e))g.append(svgEl('circle',{r:radius+2*scale,fill:'none',stroke:'#f4fff7','stroke-width':1.5*scale,'pointer-events':'none'}));
     if(selected===e.id||isSelf(e)){const label=svgEl('text',{x:12*scale,y:4*scale,'font-size':12*scale,class:'marker-label','stroke-width':3*scale});label.textContent=displayName(e)+(relative?` · ${distanceText(relative.distance)} · ${relative.direction}`:'');g.append(label);}
     g.onclick=event=>{event.stopPropagation();if(measurementMode)addMeasurement(e);else selectEntity(e.id,false);};g.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();if(measurementMode)addMeasurement(e);else selectEntity(e.id,false);}};fragment.append(g);
-  }group.append(fragment);drawProximity();drawRoutes();drawMeasurements();
+  }group.append(fragment);drawAiDensity();drawProximity();drawRoutes();drawMeasurements();
 }
 function drawRoutes(){
   const group=$('routes');group.replaceChildren();const segments=trailSegments(),scale=view.width/Math.max(1,svg.clientWidth),target=activeRouteTarget();
@@ -206,6 +254,11 @@ function renderFrame(){
   $('timelineResolution').textContent=r.tracks?`Bước thời gian ~${r.history_sample_seconds||1}s`:'Chưa có lịch sử trong bản sao này';$('snapshotBadge').textContent=archiveId?'LỊCH SỬ':'MỚI NHẤT';$('snapshotBadge').classList.toggle('archived',!!archiveId);$('exportCsv').disabled=false;$('exportJson').disabled=false;$('meBtn').disabled=!playerProfile?.steam_id;renderEntities();
 }
 function setTime(time){viewTime=time;frameCacheKey='';renderFrame();applyFollow();}
+$('aiDensityToggle').checked=aiDensitySettings.enabled;$('aiDensitySize').value=String(aiDensitySettings.cellMeters);
+$('aiDensityToggle').onchange=()=>{aiDensitySettings.enabled=$('aiDensityToggle').checked;saveAiDensitySettings();drawAiDensity();};
+$('aiDensitySize').onchange=()=>{aiDensitySettings.cellMeters=Number($('aiDensitySize').value);aiDensitySelected=null;saveAiDensitySettings();renderAiDensity();drawAiDensity();};
+$('aiDensitySpecies').onchange=()=>{aiDensitySettings.species=$('aiDensitySpecies').value;aiDensitySelected=null;saveAiDensitySettings();renderAiDensity();drawAiDensity();};
+$('aiDensityFit').onclick=()=>focusAiDensity();$('aiDensityMore').onclick=()=>{aiDensityExpanded=!aiDensityExpanded;renderAiDensity();};
 for(const [id,key]of[['proximityEnabled','enabled'],['proximityArrows','arrows'],['proximitySound','sound'],['ignoreFriends','ignoreFriends']]){$(id).checked=proximitySettings[key];$(id).onchange=()=>{proximitySettings[key]=$(id).checked;if(key==='enabled')alertJournal.tracking.levels={};if(key==='sound')prepareProximityAudio();saveProximitySettings();};}
 $('proximityRadius').value=proximitySettings.radius;$('proximityKind').value=proximitySettings.kind;
 function saveProximitySettings(){try{localStorage.setItem('isle-proximity',JSON.stringify(proximitySettings));}catch(_){}proximityCacheKey='';renderEntities();}

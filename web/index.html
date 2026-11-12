@@ -38,6 +38,12 @@
         <details id="alertLogDetails" class="radar-details"><summary>Nhật ký cảnh báo <span id="alertLogCount" class="count-badge">0</span></summary><div class="radar-details-body"><div class="alert-log-heading"><span class="tool-hint">Ghi khi web đang mở · lưu tối đa 200 mục trên trình duyệt này.</span><button id="clearAlertLog" class="text-button small" type="button">Xóa nhật ký</button></div><div id="alertLog" class="alert-log"></div></div></details>
       </div>
     </section>
+    <section id="aiDensityPanel" class="ai-density-panel" aria-labelledby="aiDensityTitle">
+      <div class="ai-density-heading"><div><p class="eyebrow">PHÂN BỐ AI TRONG REPLAY</p><h2 id="aiDensityTitle">Khu đông AI</h2><p id="aiDensitySummary" role="status">Đang chờ dữ liệu replay.</p></div><button id="aiDensityFit" class="tool-button" disabled>⌖ Xem các khu trên map</button></div>
+      <div class="ai-density-controls"><label><input id="aiDensityToggle" type="checkbox" checked> Tô mật độ trên map</label><label>Kích thước ô <select id="aiDensitySize"><option value="250">250 × 250 m</option><option value="500" selected>500 × 500 m</option><option value="1000">1.000 × 1.000 m</option></select></label><label>Loài AI <select id="aiDensitySpecies"><option value="">Tất cả loài AI</option></select></label><span class="ai-density-legend"><i></i><i></i><i></i> Đậm hơn = nhiều AI hơn trong ô</span></div>
+      <div id="aiDensityList" class="ai-density-list"></div>
+      <div class="ai-density-footer"><p>Chỉ tính AI còn trong phạm vi ghi tại mốc đang xem. Khoảng cách và hướng tính đến tâm ô. Bấm một ô để phóng tới trên map; chọn loài để xem riêng, ví dụ hươu hoặc cá. Vùng trống là chưa có AI được ghi ở mốc này.</p><button id="aiDensityMore" class="text-button small" aria-expanded="false" hidden>Xem tất cả các ô</button></div>
+    </section>
     <section class="workspace">
       <div class="map-panel">
         <div class="panel-heading"><div class="panel-title"><span class="panel-number">01</span> Bản đồ quan sát <span class="map-badge">GATEWAY</span></div><button class="text-button small" id="focusBtn">⌖ Tập trung đối tượng</button></div>
@@ -46,7 +52,7 @@
         <div id="mapContainer" class="map-container">
           <svg id="mapSvg" viewBox="0 0 3900 3908" role="img" aria-label="Bản đồ Gateway; kéo để di chuyển, lăn chuột để phóng to">
             <image href="/assets/gateway.webp" x="0" y="0" width="3900" height="3908"/>
-            <g id="proximityOverlay" aria-hidden="true"></g><g id="routes"></g><g id="measurements"></g><g id="markers"></g>
+            <g id="aiDensityOverlay" aria-hidden="true"></g><g id="proximityOverlay" aria-hidden="true"></g><g id="routes"></g><g id="measurements"></g><g id="markers"></g>
           </svg>
           <div class="map-corner"><span class="map-corner-line"></span>N<span class="map-coordinate" id="cursorCoord">X — / Y —</span></div>
           <div class="zoom-controls"><button id="zoomIn" aria-label="Phóng to">+</button><button id="zoomOut" aria-label="Thu nhỏ">−</button><button id="fitBtn" aria-label="Xem toàn bộ đảo">⛶</button></div>

@@ -28,6 +28,40 @@
     return Number.isFinite(e.x) && Number.isFinite(e.y) && !(e.x === 0 && e.y === 0 && e.z === 0);
   }
   function distanceMeters(a, b) { return Math.hypot(a.x - b.x, a.y - b.y) / 100; }
+  function aiDensity(entities, options = {}) {
+    const cellMeters = [250, 500, 1000].includes(options.cellMeters) ? options.cellMeters : 500;
+    const units = cellMeters * 100, bounds = options.bounds || {};
+    const bounded = ['world_x_min','world_x_max','world_y_min','world_y_max'].every(k => Number.isFinite(bounds[k])) && bounds.world_x_max > bounds.world_x_min && bounds.world_y_max > bounds.world_y_min;
+    const x0 = bounded ? bounds.world_x_min : 0, y0 = bounded ? bounds.world_y_min : 0;
+    const actors = new Map(), cells = new Map();
+    for (const e of entities || []) {
+      if (e.kind !== 'ai' || !e.in_scope || e.dead || !hasPosition(e) || e.id === undefined || e.id === null) continue;
+      if (bounded && (e.x < x0 || e.x > bounds.world_x_max || e.y < y0 || e.y > bounds.world_y_max)) continue;
+      const key = String(e.id), previous = actors.get(key);
+      if (!previous || (e.last_seen ?? 0) > (previous.last_seen ?? 0)) actors.set(key, e);
+    }
+    let total = 0;
+    for (const e of actors.values()) {
+      if (options.species && e.species !== options.species) continue;
+      let col = Math.floor((e.x - x0) / units), row = Math.floor((e.y - y0) / units);
+      if (bounded) {
+        col = Math.min(col, Math.ceil((bounds.world_x_max - x0) / units) - 1);
+        row = Math.min(row, Math.ceil((bounds.world_y_max - y0) / units) - 1);
+      }
+      const id = `${cellMeters}:${col}:${row}`;
+      if (!cells.has(id)) {
+        const xMin = x0 + col * units, yMin = y0 + row * units;
+        const xMax = bounded ? Math.min(xMin + units, bounds.world_x_max) : xMin + units;
+        const yMax = bounded ? Math.min(yMin + units, bounds.world_y_max) : yMin + units;
+        cells.set(id, {id, col, row, x:(xMin+xMax)/2, y:(yMin+yMax)/2, bounds:{xMin,xMax,yMin,yMax}, count:0, species:new Map()});
+      }
+      const cell = cells.get(id), name = e.species || '';
+      cell.count++; total++; cell.species.set(name, (cell.species.get(name) || 0) + 1);
+    }
+    const ranked = [...cells.values()].map(cell => ({...cell, species:[...cell.species].map(([name,count]) => ({name,count})).sort((a,b) => b.count-a.count || a.name.localeCompare(b.name))}))
+      .sort((a,b) => b.count-a.count || a.row-b.row || a.col-b.col);
+    return {cellMeters, total, cells:ranked, maxCount:ranked[0]?.count || 0};
+  }
   // World X points east and world Y south. Bearings are clockwise from north.
   function relativePosition(origin, target) {
     if (!origin || !target || !hasPosition(origin) || !hasPosition(target)) return null;
@@ -129,7 +163,7 @@
       e.growth === null ? null : Math.round(e.growth * 10000) / 100,e.in_scope,e.dead,e.last_seen]);
     return '\uFEFF' + [columns, ...rows].map(row => row.map(cell).join(',')).join('\r\n');
   }
-  const api = Object.freeze({sampleIndex, frameEntities, hasPosition, distanceMeters, relativePosition, proximity, proximityLevel, targetIdentity, proximityTransitions, routeSegments, routeDistance, matchesFilters, followTarget, csv});
+  const api = Object.freeze({sampleIndex, frameEntities, hasPosition, distanceMeters, aiDensity, relativePosition, proximity, proximityLevel, targetIdentity, proximityTransitions, routeSegments, routeDistance, matchesFilters, followTarget, csv});
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.ReplayModel = api;
 })(globalThis);

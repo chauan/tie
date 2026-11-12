@@ -88,3 +88,34 @@
 @media(max-width:760px){.radar-level{font-size:8px;padding:4px 6px}.radar-details-body{padding:10px}.teammate-form input{font-size:10px}.radar-extras{gap:8px}.toast{width:calc(100vw - 30px);font-size:11px;padding:12px 15px}.alert-log-row>strong{font-size:10px}}
 
 .profile-form{display:flex;align-items:end;gap:9px;flex-wrap:wrap;padding:12px 0;margin-top:8px;border-bottom:1px solid #43513e}.profile-form label{display:flex;flex-direction:column;gap:6px;font-size:10px;color:#afc3b6;min-width:0}.profile-form label:first-child{flex:1;min-width:200px;max-width:340px}.profile-form input{background:#0b1710;color:#deebdf;border:1px solid #45604b;border-radius:4px;padding:8px;font-size:11px;width:100%;min-width:0}.profile-current{font-size:10px;color:#b6d4b9;align-self:center;overflow-wrap:anywhere}.profile-form~.error-text:empty{display:none}@media(max-width:760px){.profile-form label:first-child{max-width:none;min-width:100%;flex-basis:100%}.profile-form label:nth-child(2){flex:1;max-width:190px}.profile-current{flex-basis:100%;font-size:9px}.profile-form{gap:8px}}
+
+.ai-density-panel{margin:0 0 20px;padding:19px;border:1px solid #4b5140;border-radius:7px;background:#151f19;min-width:0}
+.ai-density-heading{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.ai-density-heading .eyebrow{margin:0 0 7px;font-size:9px;color:#c3b27d}
+.ai-density-heading h2{margin:0;font-size:21px;font-weight:600;color:#e4ebdf}
+.ai-density-heading p:last-child{margin:8px 0 0;font-size:11px;line-height:1.5;color:#a5b9aa}
+.ai-density-controls{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:16px;color:#bbcbbd;font-size:11px}
+.ai-density-controls label{display:flex;align-items:center;gap:7px;min-width:0}
+.ai-density-controls input{accent-color:var(--green)}
+.ai-density-controls select{max-width:220px;min-width:0;padding:7px 8px;background:#0e1811;color:#d7e5d7;border:1px solid #485c43;border-radius:4px;font-size:11px}
+.ai-density-legend{display:flex;align-items:center;gap:4px;font-size:10px;color:#a9b59c}
+.ai-density-legend i{width:11px;height:11px;background:#e8cf704d;border:1px solid #e8cf70;border-radius:2px}
+.ai-density-legend i:nth-child(2){background:#f5ac5d75;border-color:#f5ac5d}
+.ai-density-legend i:nth-child(3){background:#fa775f99;border-color:#fa775f;margin-right:5px}
+.ai-density-list{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-top:16px;max-height:360px;overflow-y:auto}
+.ai-density-card{display:flex;flex-direction:column;gap:9px;padding:12px;text-align:left;background:#101a14;border:1px solid #4b503b;border-radius:5px;color:#cad8c9;min-width:0;font:inherit;cursor:pointer}
+.ai-density-card:hover,.ai-density-card:focus-visible{background:#222e1e;border-color:#c5bc76;outline:2px solid transparent}
+.ai-density-card.selected{border-color:#b2e4b3;background:#213324}
+.ai-density-card-heading{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;font:10px var(--mono);color:#a7b394}
+.ai-density-card-heading strong{font-size:17px;color:#f1cf85;white-space:nowrap}
+.ai-density-species{font-size:10px;line-height:1.7;overflow-wrap:anywhere;color:#c0c9af}
+.ai-density-direction{display:flex;align-items:center;gap:5px;margin-top:auto;font-size:10px;line-height:1.6;color:#a5c5aa}
+.ai-density-direction .direction-arrow{font-size:15px;width:15px;height:15px}
+.ai-density-footer{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:11px}
+.ai-density-footer p{margin:0;font-size:10px;line-height:1.8;color:#90a18d;max-width:950px}
+.ai-density-footer button{flex-shrink:0}
+.ai-density-empty{grid-column:1/-1;margin:0;padding:11px 0;color:#9eaf9e;font-size:11px}
+#aiDensityOverlay{pointer-events:none}
+.ai-density-count{fill:#fff2c4;stroke:#182116;paint-order:stroke;stroke-linejoin:round;font-family:var(--mono);font-weight:600}
+@media(max-width:1100px){.ai-density-list{grid-template-columns:repeat(3,minmax(0,1fr))}.ai-density-legend{flex-basis:100%}}
+@media(max-width:760px){.ai-density-panel{padding:14px 12px}.ai-density-heading{align-items:flex-start}.ai-density-heading h2{font-size:18px}.ai-density-heading .tool-button{max-width:125px;white-space:normal;line-height:1.5}.ai-density-controls{gap:10px;font-size:10px}.ai-density-controls select{font-size:10px;max-width:190px}.ai-density-list{grid-template-columns:repeat(2,minmax(0,1fr));max-height:310px}.ai-density-card{padding:10px}.ai-density-footer{align-items:flex-start;flex-direction:column;gap:8px}.ai-density-heading p:last-child{font-size:10px}.ai-density-card-heading strong{font-size:16px}}

@@ -34,6 +34,7 @@ Hoặc truyền đường dẫn trực tiếp:
 ## Tính năng
 
 - Bản đồ Gateway, vị trí người chơi và AI có trong replay.
+- Mục **Khu đông AI**: tô mật độ theo ô 250, 500 hoặc 1.000 m; xếp hạng top 5 hoặc xem toàn bộ ô có AI, lọc theo loài và bấm một ô để phóng tới trên map. Số lượng đổi theo mốc timeline; không tính AI đã chết hoặc mất dấu. Khoảng cách/hướng tới tâm ô chỉ hiện khi có vị trí tài khoản được chọn tại cùng mốc.
 - Nhập SteamID 17 chữ số để chọn tâm radar; không cài sẵn tài khoản.
 - Khoảng cách, hướng, mũi tên và cảnh báo gần với tên loài, phần trăm trưởng thành khi replay có dữ liệu.
 - Mặc định cảnh báo người chơi và AI trong 500 m; có bộ lọc, đồng đội, âm thanh và nhật ký.
@@ -56,7 +57,10 @@ Các kiểm tra tự động dùng dữ liệu giả, không cần replay cá nh
 node .\tests\test_projection.cjs
 node .\tests\test_replay_model.cjs
 node .\tests\test_proximity.cjs
+node .\tests\test_ai_density.cjs
 ```
+
+Khi web đang chạy, `tests/browser_ai_density.py` kiểm tra dữ liệu thật qua API chỉ đọc, rồi kiểm tra giao diện với dữ liệu giả trong một browser context riêng. Kiểm tra này cần Python có Playwright và Chrome; ảnh kiểm tra lưu trong `qa/`, không đưa lên Git.
 
 Tạo ZIP script kèm runtime để chép sang máy Windows x64 khác:
 
