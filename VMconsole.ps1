@@ -66,7 +66,7 @@ try {
     $originPrefix = $SourceFolder + '\'; $copyPrefix = $CopyFolder + '\'
     if ($originPrefix.StartsWith($copyPrefix,[StringComparison]::OrdinalIgnoreCase) -or $copyPrefix.StartsWith($originPrefix,[StringComparison]::OrdinalIgnoreCase)) { throw 'The source and copy folders must be separate.' }
     $config['source_dir'] = $SourceFolder; $config['filename'] = [string]$ReplayFile; $config['copy_dir'] = $CopyFolder
-    if (-not $config.ContainsKey('interval_seconds')) { $config['interval_seconds'] = 180 }
+    if (-not $config.ContainsKey('interval_seconds')) { $config['interval_seconds'] = 20 }
     $temporary = $configFile + '.new'
     [IO.File]::WriteAllText($temporary,($config | ConvertTo-Json -Depth 5),(New-Object Text.UTF8Encoding($false)))
     if ([IO.File]::Exists($configFile)) {

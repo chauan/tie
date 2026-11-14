@@ -7,23 +7,23 @@ import zipfile
 import argparse
 
 ROOT = Path(__file__).resolve().parent
-FILES = ('replay_service.py','runtime.ps1','launch.ps1','service.ps1','setup.ps1','bootstrap-python.ps1',
-         'start.cmd','stop.cmd','doctor.ps1','check.cmd','README.md','PORTABLE.md','MAP-SOURCES.md','VITALS-SOURCES.md')
+FILES = ('replay_service.py','telegram_alerts.py','runtime.ps1','launch.ps1','service.ps1','setup.ps1','bootstrap-python.ps1',
+         'start.cmd','stop.cmd','doctor.ps1','check.cmd','README.md','PORTABLE.md','MAP-SOURCES.md','VITALS-SOURCES.md','TELEGRAM.md','EFFECTS-SOURCES.md')
 
 
-def build(web_root=None, windows_service=False, console_script=False):
+def build(web_root=None, windows_service=False, console_script=False, output_dir=None):
     if windows_service and console_script:
         raise ValueError('Choose one distribution mode.')
-    output = ROOT / 'dist'
-    output.mkdir(exist_ok=True)
+    output = Path(output_dir).resolve() if output_dir else ROOT / 'dist'
+    output.mkdir(parents=True, exist_ok=True)
     folder = output / ('VMconsole-win-x64' if console_script else 'ReplayRadar-Service-win-x64' if windows_service else 'ReplayRadar-win-x64')
     # Refuse to merge a stale release tree, which might contain a user's settings.
     if folder.exists():
         raise FileExistsError('Release folder already exists. Choose a clean dist directory before rebuilding.')
     folder.mkdir()
-    files = ('replay_service.py','ReplayRadar.exe','ReplayRadar.Service.exe','ReplayRadar.exe.config','ReplayRadar.Service.exe.config','WINDOWS-SERVICE.md','MAP-SOURCES.md','VITALS-SOURCES.md') if windows_service else FILES
+    files = ('replay_service.py','telegram_alerts.py','ReplayRadar.exe','ReplayRadar.Service.exe','ReplayRadar.exe.config','ReplayRadar.Service.exe.config','WINDOWS-SERVICE.md','MAP-SOURCES.md','VITALS-SOURCES.md','TELEGRAM.md','EFFECTS-SOURCES.md') if windows_service else FILES
     if console_script:
-        files = ('VMconsole.cmd','VMconsole.ps1','runtime.ps1','replay_service.py','MAP-SOURCES.md','VITALS-SOURCES.md')
+        files = ('VMconsole.cmd','VMconsole.ps1','runtime.ps1','replay_service.py','telegram_alerts.py','MAP-SOURCES.md','VITALS-SOURCES.md','TELEGRAM.md','EFFECTS-SOURCES.md')
     for name in files:
         shutil.copy2(ROOT / name, folder / name)
     shutil.copytree(web_root or ROOT / 'web', folder / 'web', ignore=shutil.ignore_patterns('player-profile.json'))
@@ -57,7 +57,10 @@ def build(web_root=None, windows_service=False, console_script=False):
             if p.is_file():
                 z.write(p,p.relative_to(output))
     with archive.open('rb') as source:
-        checksum = hashlib.file_digest(source,'sha256').hexdigest()
+        digest = hashlib.sha256()
+        for chunk in iter(lambda: source.read(1024 * 1024), b''):
+            digest.update(chunk)
+        checksum = digest.hexdigest()
     archive.with_suffix('.zip.sha256').write_text(checksum+'  '+archive.name+'\n',encoding='ascii')
     print(json.dumps({'archive':str(archive),'bytes':archive.stat().st_size,'sha256':checksum}))
 
@@ -67,5 +70,6 @@ if __name__ == '__main__':
     parser.add_argument('--web-root',type=Path)
     parser.add_argument('--windows-service',action='store_true')
     parser.add_argument('--console-script',action='store_true')
+    parser.add_argument('--output-dir',type=Path,help='Build into a new release directory without replacing an existing package.')
     args=parser.parse_args()
-    build(args.web_root,args.windows_service,args.console_script)
+    build(args.web_root,args.windows_service,args.console_script,args.output_dir)

@@ -1,0 +1,17 @@
+{
+  "binary_sha256": "440e5e9ede3a808d98a0c65f528c9da41eb6444040934f1f8ca03c37d38d4115",
+  "binary_bytes": 204050944,
+  "struct_name": "FNegativeEffects",
+  "serializer_rva": "0x05493300",
+  "serialized_boolean_bits": 32,
+  "members": [
+    {"slot": 1, "mask": 1, "native_name": "bSlovenly", "storage_offset": 0},
+    {"slot": 2, "mask": 2, "native_name": "bFluidDeficient", "storage_offset": 1},
+    {"slot": 3, "mask": 4, "native_name": "bHasCataracts", "storage_offset": 2},
+    {"slot": 4, "mask": 8, "native_name": "bGlassBones", "storage_offset": 3},
+    {"slot": 5, "mask": 16, "native_name": "bIsSickState", "storage_offset": 4},
+    {"slot": 6, "mask": 32, "native_name": "bIsHeadFractured", "storage_offset": 5},
+    {"slot": 7, "mask": 64, "native_name": "bIsBodyFractured", "storage_offset": 6},
+    {"slot": 8, "mask": 128, "native_name": "bIsLegsFractured", "storage_offset": 7}
+  ]
+}

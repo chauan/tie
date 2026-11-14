@@ -1,5 +1,11 @@
 (function (root) {
   'use strict';
+  const extendedFields=['weight','weight_seen','blood','max_blood','blood_seen','max_blood_seen',
+    'food_value','max_food_value','food_seen','max_food_seen','rotten_value','rotten_seen',
+    'yaw','pitch','roll','velocity_x','velocity_y','velocity_z','movement_seen',
+    'group_id','is_group_leader','group_seen','ability_state','ability_seen','negative_effects_mask','effects_seen'];
+  function excludedEntity(entity){return /coalecanth|coalacanth|coelacanth/i.test(`${entity?.class_path||''} ${entity?.species||''}`);}
+  function sameGroup(a,b){return Number.isInteger(a?.group_id)&&a.group_id!==0&&Number.isInteger(b?.group_id)&&a.group_id===b.group_id;}
   function sampleIndex(samples, time) {
     let lo = 0, hi = samples.length - 1, answer = -1;
     while (lo <= hi) {
@@ -11,18 +17,23 @@
   }
   function frameEntities(replay, time) {
     if (!replay) return [];
-    if (!replay.tracks) return replay.entities || [];
+    if (!replay.tracks) return (replay.entities || []).filter(e=>!excludedEntity(e));
     const result = [];
     for (const entity of replay.entities || []) {
+      if(excludedEntity(entity))continue;
       const samples = replay.tracks[entity.id];
       if (!samples?.length) continue;
       const index = sampleIndex(samples, time);
       if (index < 0) continue;
       const s = samples[index];
-      result.push({...entity, x:s[1], y:s[2], z:s[3], in_scope:s[4] === 1,
+      const extended=Object.fromEntries(extendedFields.map((key,i)=>[key,s.length>=42?s[16+i]:null]));
+      extended.is_group_leader=extended.is_group_leader===null||extended.is_group_leader===-1?null:extended.is_group_leader===1;
+      result.push({...entity,...extended, x:s[1], y:s[2], z:s[3], in_scope:s[4] === 1,
         dead:s[5] === -1 ? null : s[5] === 1, growth:s[6], last_seen:s[7],
         health:s.length>=12?s[8]:null, max_health:s.length>=12?s[9]:null,
-        health_seen:s.length>=12?s[10]:null, max_health_seen:s.length>=12?s[11]:null});
+        health_seen:s.length>=12?s[10]:null, max_health_seen:s.length>=12?s[11]:null,
+        stamina:s.length>=16?s[12]:null, max_stamina:s.length>=16?s[13]:null,
+        stamina_seen:s.length>=16?s[14]:null, max_stamina_seen:s.length>=16?s[15]:null});
     }
     return result;
   }
@@ -34,9 +45,43 @@
     const valid = value => Number.isFinite(value) && value >= 0 ? value : null;
     const health = valid(entity?.health), maximum = valid(entity?.max_health);
     const maxHealth = maximum !== null && maximum > 0 ? maximum : null;
+    const stamina = valid(entity?.stamina), staminaMaximum = valid(entity?.max_stamina);
+    const maxStamina = staminaMaximum !== null && staminaMaximum > 0 ? staminaMaximum : null;
     const dinosaur = typeof entity?.class_path === 'string' && entity.class_path.includes('/Characters/Dinosaurs/');
+    const weight=valid(entity?.weight),blood=valid(entity?.blood),bloodMaximum=valid(entity?.max_blood),maxBlood=bloodMaximum>0?bloodMaximum:null;
+    const foodValue=valid(entity?.food_value),foodMaximum=valid(entity?.max_food_value),maxFoodValue=foodMaximum>0?foodMaximum:null;
+    const motion=[entity?.velocity_x,entity?.velocity_y,entity?.velocity_z].every(Number.isFinite);
     return {health, maxHealth, percent:health!==null&&maxHealth!==null?health/maxHealth*100:null,
-      estimatedWeightKg:dinosaur?maxHealth:null, healthSeen:valid(entity?.health_seen), maxHealthSeen:valid(entity?.max_health_seen)};
+      estimatedWeightKg:dinosaur?maxHealth:null, healthSeen:valid(entity?.health_seen), maxHealthSeen:valid(entity?.max_health_seen),
+      stamina, maxStamina, staminaPercent:stamina!==null&&maxStamina!==null?stamina/maxStamina*100:null,
+      staminaSeen:valid(entity?.stamina_seen), maxStaminaSeen:valid(entity?.max_stamina_seen),
+      weight,weightSeen:valid(entity?.weight_seen),blood,maxBlood,bloodPercent:blood!==null&&maxBlood!==null?blood/maxBlood*100:null,
+      bloodSeen:valid(entity?.blood_seen),maxBloodSeen:valid(entity?.max_blood_seen),
+      foodValue,maxFoodValue,foodPercent:foodValue!==null&&maxFoodValue!==null?foodValue/maxFoodValue*100:null,
+      foodSeen:valid(entity?.food_seen),maxFoodSeen:valid(entity?.max_food_seen),rottenValue:valid(entity?.rotten_value),rottenSeen:valid(entity?.rotten_seen),
+      speedMps:motion?Math.hypot(entity.velocity_x,entity.velocity_y,entity.velocity_z)/100:null,
+      heading:Number.isFinite(entity?.yaw)?((entity.yaw+90)%360+360)%360:null,movementSeen:valid(entity?.movement_seen)};
+  }
+  const abilityNames={0:'Kéo xác bên trái',1:'Kéo xác bên phải',2:'Giữ vật',3:'Giữ mục tiêu sau cú lao',4:'Giữ mục tiêu',5:'Bắt đầu động tác giữ',10:'Vồ mục tiêu nhỏ',11:'Vồ mục tiêu lớn',18:'Bị vồ (nhỏ)',19:'Bị vồ (lớn)',20:'Vùng vẫy khi bị vồ (nhỏ)',21:'Vùng vẫy khi bị vồ (lớn)',22:'Bị ghì',23:'Bị ghì phía trước',24:'Hồi phục sau khi bị vồ',27:'Bị nuốt',28:'Được mang',29:'Bị kéo',30:'Xác',52:'Bị giữ sau cú lao',53:'Bị kẹp',59:'Phôi',60:'Đang nở',69:'Bị vồ',70:'Vùng vẫy khi bị vồ',84:'Không có hành động đặc biệt'};
+  // Native FNegativeEffects property offsets and NetSerialize order: EFFECTS-SOURCES.md.
+  const effectDefinitions=Object.freeze([
+    {key:'bSlovenly',label:'Vệ sinh kém',name:'Slovenly',symbol:'effect-alert'},
+    {key:'bFluidDeficient',label:'Thiếu dịch cơ thể',name:'Fluid Deficient',symbol:'effect-fluid'},
+    {key:'bHasCataracts',label:'Đục thủy tinh thể',name:'Cataracts',symbol:'effect-eye'},
+    {key:'bGlassBones',label:'Xương giòn',name:'Glass Bones',symbol:'effect-bone'},
+    {key:'bIsSickState',label:'Đang bị bệnh',name:'Sick',symbol:'effect-alert'},
+    {key:'bIsHeadFractured',label:'Gãy xương đầu',name:'Head Fracture',symbol:'effect-bone'},
+    {key:'bIsBodyFractured',label:'Gãy xương thân',name:'Body Fracture',symbol:'effect-bone'},
+    {key:'bIsLegsFractured',label:'Gãy chân',name:'Leg Fracture',symbol:'effect-bone'}
+  ].map(Object.freeze));
+  function creatureState(entity){
+    const raw=entity?.ability_state,ability=Number.isInteger(raw)&&raw>=0&&raw<=127?raw:null;
+    const mask=entity?.negative_effects_mask,effects=Number.isInteger(mask)&&mask>=0&&mask<=255?Array.from({length:8},(_,i)=>i+1).filter(i=>mask&(1<<(i-1))):null;
+    const effectDetails=effects?.map(slot=>effectDefinitions[slot-1])??null;
+    const effectsSeen=Number.isFinite(entity?.effects_seen)&&entity.effects_seen>=0?entity.effects_seen:null;
+    return {ability,abilityLabel:ability===null?'Chưa rõ':abilityNames[ability]||`Hành động #${ability} (chưa rõ tên)`,effects,effectDetails,effectsSeen,
+      effectsStatus:effects===null?'unknown':effects.length?'active':'clear',
+      effectsLabel:effects===null?'Chưa có dữ liệu hiệu ứng ở mốc này':effects.length?effectDetails.map(effect=>effect.label).join(' · '):'Không ghi nhận hiệu ứng bất lợi'};
   }
   function aiDensity(entities, options = {}) {
     const cellMeters = [250, 500, 1000].includes(options.cellMeters) ? options.cellMeters : 500;
@@ -95,7 +140,7 @@
       if (!previous || e.last_seen > previous.last_seen) byIdentity.set(key, e);
     }
     const friends = new Set(options.friendIds || []);
-    const targets = [...byIdentity.values()].map(entity => ({entity, friendly:entity.kind === 'player' && friends.has(entity.steam_id), ...relativePosition(owner, entity)}))
+    const targets = [...byIdentity.values()].map(entity => ({entity, friendly:entity.kind === 'player' && (friends.has(entity.steam_id)||sameGroup(owner,entity)), ...relativePosition(owner, entity)}))
       .sort((a,b) => a.distance - b.distance || a.entity.id - b.entity.id);
     const nearby = targets.filter(t => t.distance <= radius && (!options.kind || options.kind === 'all' || t.entity.kind === options.kind));
     const alerts = nearby.filter(t => !(options.ignoreFriends && t.friendly));
@@ -163,19 +208,23 @@
   }
   function csv(entities, time) {
     const columns = ['time_seconds','actor_id','name','steam_id','kind','species','x_cm','y_cm','z_cm','growth_percent','in_scope','dead','last_seen_seconds',
-      'health_hp','max_health_hp','health_percent','estimated_weight_kg_from_max_health','health_observed_at_seconds','max_health_observed_at_seconds'];
+      'health_hp','max_health_hp','health_percent','estimated_weight_kg_from_max_health','health_observed_at_seconds','max_health_observed_at_seconds',
+      'stamina','max_stamina','stamina_percent','stamina_observed_at_seconds','max_stamina_observed_at_seconds',
+      ...extendedFields,'blood_percent','food_percent','speed_mps','heading_degrees','negative_effects_status','negative_effects_names'];
     const cell = value => {
       if (value === null || value === undefined) return '""';
       let text = String(value);
       if (typeof value === 'string' && /^[=+\-@\t\r]/.test(text)) text = "'" + text;
       return '"' + text.replaceAll('"','""') + '"';
     };
-    const rows = entities.map(e => { const v=dinoVitals(e); return [time,e.id,e.name,e.steam_id,e.kind,e.species,e.x,e.y,e.z,
+    const rows = entities.map(e => { const v=dinoVitals(e),state=creatureState(e); return [time,e.id,e.name,e.steam_id,e.kind,e.species,e.x,e.y,e.z,
       e.growth === null ? null : Math.round(e.growth * 10000) / 100,e.in_scope,e.dead,e.last_seen,
-      v.health,v.maxHealth,v.percent,v.estimatedWeightKg,v.healthSeen,v.maxHealthSeen]; });
+      v.health,v.maxHealth,v.percent,v.estimatedWeightKg,v.healthSeen,v.maxHealthSeen,
+      v.stamina,v.maxStamina,v.staminaPercent,v.staminaSeen,v.maxStaminaSeen,
+      ...extendedFields.map(key=>e[key]),v.bloodPercent,v.foodPercent,v.speedMps,v.heading,state.effectsStatus,state.effectDetails?.map(effect=>effect.label).join('; ')??null]; });
     return '\uFEFF' + [columns, ...rows].map(row => row.map(cell).join(',')).join('\r\n');
   }
-  const api = Object.freeze({sampleIndex, frameEntities, hasPosition, distanceMeters, dinoVitals, aiDensity, relativePosition, proximity, proximityLevel, targetIdentity, proximityTransitions, routeSegments, routeDistance, matchesFilters, followTarget, csv});
+  const api = Object.freeze({sampleIndex, frameEntities, hasPosition, distanceMeters, dinoVitals, creatureState, excludedEntity, sameGroup, aiDensity, relativePosition, proximity, proximityLevel, targetIdentity, proximityTransitions, routeSegments, routeDistance, matchesFilters, followTarget, csv});
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.ReplayModel = api;
 })(globalThis);

@@ -27,6 +27,36 @@ public class Entity
     public double? MaxHealth { get; set; }
     public double? HealthSeen { get; set; }
     public double? MaxHealthSeen { get; set; }
+    public double? Stamina { get; set; }
+    public double? MaxStamina { get; set; }
+    public double? StaminaSeen { get; set; }
+    public double? MaxStaminaSeen { get; set; }
+    public double? Weight { get; set; }
+    public double? WeightSeen { get; set; }
+    public double? Blood { get; set; }
+    public double? MaxBlood { get; set; }
+    public double? BloodSeen { get; set; }
+    public double? MaxBloodSeen { get; set; }
+    public double? FoodValue { get; set; }
+    public double? MaxFoodValue { get; set; }
+    public double? FoodSeen { get; set; }
+    public double? MaxFoodSeen { get; set; }
+    public double? RottenValue { get; set; }
+    public double? RottenSeen { get; set; }
+    public double? Yaw { get; set; }
+    public double? Pitch { get; set; }
+    public double? Roll { get; set; }
+    public double? VelocityX { get; set; }
+    public double? VelocityY { get; set; }
+    public double? VelocityZ { get; set; }
+    public double? MovementSeen { get; set; }
+    public int? GroupId { get; set; }
+    public bool? IsGroupLeader { get; set; }
+    public double? GroupSeen { get; set; }
+    public byte? AbilityState { get; set; }
+    public double? AbilitySeen { get; set; }
+    public byte? NegativeEffectsMask { get; set; }
+    public double? EffectsSeen { get; set; }
     public double? X { get; set; }
     public double? Y { get; set; }
     public double? Z { get; set; }
@@ -55,13 +85,17 @@ public class IsleReader : ReplayReader<Replay>
 {
     public readonly Dictionary<uint, Entity> Entities = new();
     public readonly Dictionary<uint, string> PlayerNames = new();
-    // t, x, y, z, scope, dead(-1=unknown), growth, last_movement, hp, max_hp, hp_seen, max_hp_seen.
+    // t, x, y, z, scope, dead(-1=unknown), growth, last_movement,
+    // hp, max_hp, hp_seen, max_hp_seen, stamina, max_stamina, stamina_seen, max_stamina_seen.
     public readonly Dictionary<uint, List<double?[]>> Tracks = new();
     public double HistorySampleSeconds = 1;
     private int historyPoints;
     public double Time;
     public int Frames, Movements, FailedMovements, Properties;
     public int VitalUpdates, UnsupportedVitalFields;
+    public int StaminaUpdates, UnsupportedStaminaFields;
+    public int ExtendedVitalUpdates, UnsupportedExtendedFields, ExcludedActors;
+    private readonly HashSet<uint> excludedActors = new();
     public Replay Result => Replay;
     public IsleReader(ILogger logger) : base(logger, ParseMode.Full) { Replay = new Replay(); }
 
@@ -75,6 +109,7 @@ public class IsleReader : ReplayReader<Replay>
         if (Entities.TryGetValue(actor.ActorNetGUID.Value, out var entity)) return entity;
         var path = _netGuidCache.GetNetFieldExportGroup(actor.Archetype?.Value)?.PathName;
         if (path == null || !IsCreature(path)) return null;
+        if (CreatureLayout.Excluded(path)) { if (excludedActors.Add(actor.ActorNetGUID.Value)) ExcludedActors++; return null; }
         var species = path.Split('/').Last().Replace("Default__BP_", "").Replace("BP_", "").Split('.')[0];
         if (species.EndsWith("_C")) species = species[..^2];
         entity = new Entity { Id = actor.ActorNetGUID.Value, ClassPath = path, Species = species, LastSeen = Time, FirstSeen = Time };
@@ -99,7 +134,13 @@ public class IsleReader : ReplayReader<Replay>
         if (!force && samples.Count > 0 && !sameTime && Time - samples[^1][0]!.Value < HistorySampleSeconds) return;
         double?[] sample = [Math.Round(Time, 4), e.X, e.Y, e.Z, e.InScope ? 1 : 0,
             e.Dead.HasValue ? (e.Dead.Value ? 1 : 0) : -1, e.Growth.HasValue ? Math.Round(e.Growth.Value, 6) : null,
-            Math.Round(e.LastSeen, 4), e.Health, e.MaxHealth, e.HealthSeen, e.MaxHealthSeen];
+            Math.Round(e.LastSeen, 4), e.Health, e.MaxHealth, e.HealthSeen, e.MaxHealthSeen,
+            e.Stamina, e.MaxStamina, e.StaminaSeen, e.MaxStaminaSeen,
+            e.Weight, e.WeightSeen, e.Blood, e.MaxBlood, e.BloodSeen, e.MaxBloodSeen,
+            e.FoodValue, e.MaxFoodValue, e.FoodSeen, e.MaxFoodSeen, e.RottenValue, e.RottenSeen,
+            e.Yaw, e.Pitch, e.Roll, e.VelocityX, e.VelocityY, e.VelocityZ, e.MovementSeen,
+            e.GroupId, e.IsGroupLeader.HasValue ? (e.IsGroupLeader.Value ? 1 : 0) : -1, e.GroupSeen,
+            e.AbilityState, e.AbilitySeen, e.NegativeEffectsMask, e.EffectsSeen];
         if (sameTime) samples[^1] = sample;
         else { samples.Add(sample); historyPoints++; }
         if (historyPoints > 600_000) CompactHistory();
@@ -120,11 +161,23 @@ public class IsleReader : ReplayReader<Replay>
                 var previous = old[i - 1];
                 bool transition = sample[4] != previous[4] || sample[5] != previous[5]
                     || sample[8].HasValue != previous[8].HasValue || sample[9].HasValue != previous[9].HasValue
-                    || sample[8] == 0 && previous[8] > 0;
+                    || sample[8] == 0 && previous[8] > 0
+                    || sample[12].HasValue != previous[12].HasValue || sample[13].HasValue != previous[13].HasValue
+                    || sample[12] == 0 && previous[12] > 0
+                    || ExtendedTransition(sample, previous)
+                    || sample[18] == 0 && previous[18] > 0 || sample[22] == 0 && previous[22] > 0
+                    || sample[35] != previous[35] || sample[36] != previous[36]
+                    || sample[38] != previous[38] || sample[40] != previous[40];
                 if (transition || sample[0] - kept[^1][0] >= HistorySampleSeconds) kept.Add(sample);
             }
             kept.Add(old[^1]); Tracks[id] = kept; historyPoints += kept.Count;
         }
+    }
+
+    static bool ExtendedTransition(double?[] sample, double?[] previous)
+    {
+        for (int i = 16; i < sample.Length; i++) if (sample[i].HasValue != previous[i].HasValue) return true;
+        return false;
     }
 
     protected override void OnChannelOpened(uint ch, NetworkGUID? actor)
@@ -186,7 +239,7 @@ public class IsleReader : ReplayReader<Replay>
             var fieldExport = group.NetFieldExports[handle];
             var field = fieldExport?.Name;
             if (count == 0) continue;
-            if (entity != null && VitalsLayout.IsAttributeGroup(group.PathName) && field == "CurrentValue" && handle is 1 or 3)
+            if (entity != null && VitalsLayout.IsAttributeGroup(group.PathName) && field == "CurrentValue" && handle is 1 or 3 or 5 or 7 or 19 or 21 or 23 or 25 or 35 or 37)
             {
                 var bytes = archive.ReadBits(count);
                 if (VitalsLayout.TryField(group.PathName, (uint)archive.EngineNetworkVersion, handle, field, fieldExport!.CompatibleChecksum, out var vital)
@@ -194,10 +247,36 @@ public class IsleReader : ReplayReader<Replay>
                 {
                     bool transition = false;
                     if (vital == VitalField.Health) { transition = !entity.Health.HasValue || value == 0 && entity.Health > 0; entity.Health = value; entity.HealthSeen = Math.Round(Time, 4); }
-                    else { transition = !entity.MaxHealth.HasValue; entity.MaxHealth = value; entity.MaxHealthSeen = Math.Round(Time, 4); }
-                    RecordState(entity, transition); VitalUpdates++;
+                    else if (vital == VitalField.MaxHealth) { transition = !entity.MaxHealth.HasValue; entity.MaxHealth = value; entity.MaxHealthSeen = Math.Round(Time, 4); }
+                    else if (vital == VitalField.Stamina) { transition = !entity.Stamina.HasValue || value == 0 && entity.Stamina > 0; entity.Stamina = value; entity.StaminaSeen = Math.Round(Time, 4); }
+                    else if (vital == VitalField.MaxStamina) { transition = !entity.MaxStamina.HasValue; entity.MaxStamina = value; entity.MaxStaminaSeen = Math.Round(Time, 4); }
+                    else if (vital == VitalField.Weight) { transition = !entity.Weight.HasValue; entity.Weight = value; entity.WeightSeen = Math.Round(Time, 4); }
+                    else if (vital == VitalField.Blood) { transition = !entity.Blood.HasValue || value == 0 && entity.Blood > 0; entity.Blood = value; entity.BloodSeen = Math.Round(Time, 4); }
+                    else if (vital == VitalField.MaxBlood) { transition = !entity.MaxBlood.HasValue; entity.MaxBlood = value; entity.MaxBloodSeen = Math.Round(Time, 4); }
+                    else if (vital == VitalField.FoodValue) { transition = !entity.FoodValue.HasValue || value == 0 && entity.FoodValue > 0; entity.FoodValue = value; entity.FoodSeen = Math.Round(Time, 4); }
+                    else if (vital == VitalField.MaxFoodValue) { transition = !entity.MaxFoodValue.HasValue; entity.MaxFoodValue = value; entity.MaxFoodSeen = Math.Round(Time, 4); }
+                    else { transition = !entity.RottenValue.HasValue; entity.RottenValue = value; entity.RottenSeen = Math.Round(Time, 4); }
+                    RecordState(entity, transition);
+                    if (vital is VitalField.Stamina or VitalField.MaxStamina) StaminaUpdates++;
+                    else if (vital is VitalField.Health or VitalField.MaxHealth) VitalUpdates++;
+                    else ExtendedVitalUpdates++;
                 }
-                else UnsupportedVitalFields++;
+                else if (handle is 5 or 7) UnsupportedStaminaFields++;
+                else if (handle is 1 or 3) UnsupportedVitalFields++;
+                else UnsupportedExtendedFields++;
+                continue;
+            }
+            if (entity != null && field is "GroupId" or "bIsGroupLeader" or "AbilityState" or "ReplicatedNegativeEffects")
+            {
+                var bytes = archive.ReadBits(count);
+                if (!CreatureLayout.Matches((uint)archive.EngineNetworkVersion, field, fieldExport!.CompatibleChecksum, count)) { UnsupportedExtendedFields++; continue; }
+                var seen = Math.Round(Time, 4);
+                if (field == "GroupId") { entity.GroupId = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(bytes); entity.GroupSeen = seen; }
+                else if (field == "bIsGroupLeader") { entity.IsGroupLeader = (bytes[0] & 1) != 0; entity.GroupSeen = seen; }
+                else if (field == "AbilityState") { entity.AbilityState = (byte)(bytes[0] & 127); entity.AbilitySeen = seen; }
+                else if (CreatureLayout.TryEffects(bytes, out var mask)) { entity.NegativeEffectsMask = mask; entity.EffectsSeen = seen; }
+                else { UnsupportedExtendedFields++; continue; }
+                RecordState(entity, true);
                 continue;
             }
             var wanted = entity != null && field is "ReplicatedMovement" or "SteamId" or "PlayerState" or "bIsAIControlled" or "bIsDead" or "Growth";
@@ -225,7 +304,15 @@ public class IsleReader : ReplayReader<Replay>
                             r.Reset();
                             move = r.SerializeRepMovement(VectorQuantization.RoundTwoDecimals, RotatorQuantization.ByteComponents);
                         }
-                        if (!r.IsError && r.AtEnd()) { SetLocation(entity, move.Location, "replicated_movement"); Movements++; }
+                        if (!r.IsError && r.AtEnd()) {
+                            if (double.IsFinite(move.Rotation.Yaw) && double.IsFinite(move.Rotation.Pitch) && double.IsFinite(move.Rotation.Roll)
+                                && double.IsFinite(move.LinearVelocity.X) && double.IsFinite(move.LinearVelocity.Y) && double.IsFinite(move.LinearVelocity.Z)) {
+                                entity.Yaw = move.Rotation.Yaw; entity.Pitch = move.Rotation.Pitch; entity.Roll = move.Rotation.Roll;
+                                entity.VelocityX = move.LinearVelocity.X; entity.VelocityY = move.LinearVelocity.Y; entity.VelocityZ = move.LinearVelocity.Z;
+                                entity.MovementSeen = Math.Round(Time, 4);
+                            }
+                            SetLocation(entity, move.Location, "replicated_movement"); Movements++;
+                        }
                         else FailedMovements++;
                         break;
                     case "SteamId":
@@ -305,9 +392,11 @@ public class Program
             reader.Parse(args[0]);
             Console.WriteLine(JsonSerializer.Serialize(new {
                 entities = reader.Entities.Values, time_seconds = reader.Time, tracks = reader.Tracks,
-                history_sample_seconds = reader.HistorySampleSeconds, history_schema = 2,
+                history_sample_seconds = reader.HistorySampleSeconds, history_schema = 4,
                 diagnostics = new { frames = reader.Frames, movements = reader.Movements, failed_movements = reader.FailedMovements,
                     properties = reader.Properties, health_updates = reader.VitalUpdates, unsupported_health_fields = reader.UnsupportedVitalFields,
+                    stamina_updates = reader.StaminaUpdates, unsupported_stamina_fields = reader.UnsupportedStaminaFields,
+                    extended_vital_updates = reader.ExtendedVitalUpdates, unsupported_extended_fields = reader.UnsupportedExtendedFields, excluded_coelacanth = reader.ExcludedActors,
                     warnings = log.WarningCount, samples = log.Samples }
             }, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower }));
             return 0;

@@ -15,15 +15,20 @@ from pathlib import Path
 import shutil
 import struct
 import subprocess
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit, unquote, parse_qs
 
 ROOT = Path(__file__).resolve().parent
+# The embedded Windows Python uses an isolated ._pth and omits the script directory.
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+from telegram_alerts import TelegramAlerts
 LOG = logging.getLogger("isle")
 MAGIC = 0x1CA2E27F
-UI_ASSETS = ("index.html", "app.js", "projection.js", "replay-model.js", "style.css", "features.css", "assets/gateway-calibration.json")
+UI_ASSETS = ("index.html", "app.js", "projection.js", "replay-model.js", "creature-panel.js", "style.css", "features.css", "console.css", "survival.css", "assets/gateway-calibration.json", "assets/survival-icons.svg", "assets/survival-metal.svg", "assets/survival-jungle.png", "assets/survival-dinosaurs.png", "assets/barlow-condensed-semibold.ttf")
 _ui_cache = (None, None)
 _ui_lock = threading.Lock()
 _profile_lock = threading.RLock()
@@ -234,7 +239,7 @@ def prepare_copy_directory(source, destination):
 
 
 class Collector:
-    def __init__(self, source, interval=180, filename="", data_dir=None, copy_dir=None):
+    def __init__(self, source, interval=20, filename="", data_dir=None, copy_dir=None):
         self.source = Path(source).expanduser().resolve()
         self.interval = interval
         self.filename = filename
@@ -260,6 +265,7 @@ class Collector:
         self.status = {"phase": "waiting", "message": "Đang chuẩn bị đồng bộ.", "next_sync_at": None,
                        "last_checked_at": None, "last_success_at": None, "error": None}
         self.thread = None
+        self.telegram = TelegramAlerts(self.data_dir)
         saved = self.data_dir / "latest.json"
         if saved.exists():
             try:
@@ -300,7 +306,8 @@ class Collector:
             replay = {k: v for k, v in self.last.items() if k not in ("entities", "tracks", "source_fingerprint")} if self.last else None
             return {"status": dict(self.status), "source_dir": str(self.source), "interval_seconds": self.interval,
                     "selected_file": self.filename, "files": self.file_list(), "replay": replay, "history": list(self.history),
-                    "player_profile": load_player_profile(self.data_dir), "copy_dir": str(self.snapshots)}
+                    "player_profile": load_player_profile(self.data_dir), "copy_dir": str(self.snapshots),
+                    "telegram": self.telegram.public()}
 
     def save_history(self, result):
         path = self.history_dir / (result["id"] + ".json.gz")
@@ -353,7 +360,9 @@ class Collector:
                 source = self.source / chosen["name"]
                 with source.open("rb") as f:
                     identity = hashlib.sha256(f.read(1024)).hexdigest()
-                fingerprint = (str(source), chosen["modified_ns"], chosen["bytes"], identity, str(self.snapshots))
+                decoder = ROOT / "decoder" / "bin" / "IsleDecoder.dll"
+                decoder_revision = hashlib.sha256(decoder.read_bytes()).hexdigest() if decoder.is_file() else "missing"
+                fingerprint = (str(source), chosen["modified_ns"], chosen["bytes"], identity, str(self.snapshots), decoder_revision)
                 if fingerprint == self.fingerprint and self.last and (self.snapshots / (self.last["id"] + ".replay")).is_file():
                     self.status.update(phase="idle", message="Chưa có thay đổi trong replay nguồn.")
                     return True
@@ -377,7 +386,7 @@ class Collector:
             if decoded.returncode:
                 raise ValueError("Bộ đọc replay gặp lỗi: " + decoded.stderr[-1600:])
             result = json.loads(decoded.stdout)
-            result.update(meta, id=snapshot_id, filename=source.name, copied_at=now())
+            result.update(meta, id=snapshot_id, filename=source.name, copied_at=now(), source_modified_at=chosen["modified_at"])
             if result["diagnostics"]["frames"] == 0:
                 raise ValueError("Bộ đọc chưa giải mã được frame; giữ bản cập nhật thành công trước đó.")
             result["timeline_available"] = bool(result.get("tracks"))
@@ -405,6 +414,7 @@ class Collector:
                     LOG.warning("Snapshot cũ đang bị khóa: %s", old.name)
             atomic_json(marker, {"application": "isle-replay-radar-workspace", "files": kept})
             LOG.info("Updated %s: %s entities, %s movement updates", source.name, len(result["entities"]), result["diagnostics"]["movements"])
+            self.telegram.submit(result, load_player_profile(self.data_dir))
             return True
         except Exception as error:
             if target:
@@ -427,6 +437,7 @@ class Collector:
             self.wake.wait(delay)
 
     def start(self):
+        self.telegram.start()
         self.thread = threading.Thread(target=self.run, name="replay-collector", daemon=True)
         self.thread.start()
 
@@ -504,7 +515,7 @@ class Handler(BaseHTTPRequestHandler):
         if file == ROOT / "web" / "index.html":
             revision = ui_revision()
             data = data.replace(b"<head>", f'<head>\n  <meta name="isle-ui-revision" content="{revision}">'.encode("utf-8"), 1)
-            for asset in ("style.css", "features.css", "projection.js", "replay-model.js", "app.js"):
+            for asset in ("style.css", "features.css", "console.css", "survival.css", "projection.js", "replay-model.js", "creature-panel.js", "app.js"):
                 data = data.replace(f'"/{asset}"'.encode("ascii"), f'"/{asset}?v={revision}"'.encode("ascii"))
         return self.send_bytes(data, content_type)
 
@@ -525,18 +536,28 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/api/sync":
                 self.server.collector.request_sync()
                 return self.json({"queued": True}, 202)
+            if self.path == "/api/telegram":
+                if body.get("enabled") and not load_player_profile(self.server.collector.data_dir).get("steam_id"):
+                    raise ValueError("Chọn SteamID của bạn trong Radar của bạn trước khi bật Telegram.")
+                return self.json(self.server.collector.telegram.configure(body))
+            if self.path == "/api/telegram/test":
+                return self.json(self.server.collector.telegram.test())
             if self.path == "/api/config":
                 source = Path(body["source_dir"]).expanduser().resolve()
                 filename = body.get("filename", "")
                 if not source.is_dir() or filename and (Path(filename).name != filename or not filename.lower().endswith(".replay")):
                     raise ValueError("Thư mục hoặc tên replay không hợp lệ.")
                 c = self.server.collector
+                interval = body.get("interval_seconds", c.interval)
+                if type(interval) is not int or not 5 <= interval <= 3600:
+                    raise ValueError("Chu kỳ đồng bộ phải là số nguyên từ 5 đến 3.600 giây.")
                 if not c.sync_lock.acquire(blocking=False):
                     return self.json({"error": "Đang đồng bộ, hãy đợi vài giây rồi thử lại."}, 409)
                 try:
                     copies = prepare_copy_directory(source, body.get("copy_dir") or c.snapshots)
                     with c.lock:
-                        atomic_json(c.data_dir / "config.json", {"source_dir": str(source), "filename": filename, "copy_dir": str(copies), "interval_seconds": c.interval})
+                        atomic_json(c.data_dir / "config.json", {"source_dir": str(source), "filename": filename, "copy_dir": str(copies), "interval_seconds": interval})
+                        c.interval = interval
                         c.source, c.filename, c.snapshots, c.fingerprint = source, filename, copies, None
                 finally:
                     c.sync_lock.release()
@@ -572,7 +593,7 @@ def main():
     parser.add_argument("--file", default=config.get("filename", ""))
     parser.add_argument("--copy-dir", type=Path, default=config.get("copy_dir", data_dir / "snapshots"))
     parser.add_argument("--port", type=int, default=8765)
-    parser.add_argument("--interval", type=int, default=config.get("interval_seconds", 180))
+    parser.add_argument("--interval", type=int, default=config.get("interval_seconds", 20))
     args = parser.parse_args()
     if args.interval < 5:
         parser.error("interval phải từ 5 giây trở lên")
@@ -603,6 +624,7 @@ def main():
         server.server_close()
         if collector.thread:
             collector.thread.join(timeout=160)
+        collector.telegram.close()
 
 
 if __name__ == "__main__":
